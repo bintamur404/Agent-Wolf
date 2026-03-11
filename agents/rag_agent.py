@@ -45,9 +45,17 @@ def build_vector_store(uploaded_files):
     splitter = RecursiveCharacterTextSplitter(chunk_size=512, chunk_overlap=50)
     chunks = splitter.split_documents(all_docs)
 
-    # Create embeddings and vector store
-    embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+    # Create embeddings (explicitly on CPU as per requirement)
+    embeddings = HuggingFaceEmbeddings(
+        model_name="sentence-transformers/all-MiniLM-L6-v2",
+        model_kwargs={'device': 'cpu'}
+    )
     vector_store = FAISS.from_documents(chunks, embeddings)
+    
+    # Save for persistence (as per requirement)
+    if not os.path.exists("database"):
+        os.makedirs("database")
+    vector_store.save_local("database/faiss_index")
 
     return vector_store
 
@@ -56,8 +64,8 @@ def ask_stream(question: str, vector_store, chat_history: list = None):
     """Streams the RAG response and returns retrieved chunks for display."""
     llm = get_llm()
 
-    # Step 1: Retrieve relevant chunks
-    docs = vector_store.similarity_search(question, k=5)
+    # Step 1: Retrieve relevant chunks (k=3 as per requirement)
+    docs = vector_store.similarity_search(question, k=3)
     context = "\n\n".join(doc.page_content for doc in docs)
 
     # Step 2: Build messages with chat history
@@ -89,7 +97,7 @@ def get_retrieved_chunks(question: str, vector_store) -> list:
     """Returns the retrieved chunks with similarity scores for display."""
     # similarity_search_with_score returns (doc, score) pairs
     # FAISS returns L2 distance — lower = more similar
-    results = vector_store.similarity_search_with_score(question, k=5)
+    results = vector_store.similarity_search_with_score(question, k=3)
 
     chunks = []
     for doc, score in results:

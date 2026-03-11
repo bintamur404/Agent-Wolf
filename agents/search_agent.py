@@ -4,12 +4,18 @@ from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 from langchain_community.tools import DuckDuckGoSearchRun
 from utils.llm import get_llm
 
+from pydantic import BaseModel, Field
+
 SYSTEM_PROMPT = (
-    "You are a helpful search assistant. Use the 'browser_search' tool to find current information "
-    "on the web to answer the user's query accurately. "
-    "Be concise, answer in short paragraphs, and use bullets only for lists. "
-    "Always cite your sources at the end: Sources:\n- [Title](URL)"
+    "You are Agent Wolf, a tactical search specialist. Your primary directive is to use the 'browser_search' tool for any query that requires external information. "
+    "CRITICAL: If you need to use the 'browser_search' tool, output ONLY the tool call. Do not provide any conversational preamble, explanation, or 'memory-based' answer. "
+    "Only after you receive the search results should you synthesize a final response. "
+    "Final responses must be concise, use source citations, and follow this format: Sources:\n- [Title](URL)"
 )
+
+class browser_search(BaseModel):
+    """Search the web for real-time information."""
+    query: str = Field(description="The hunt-query to search the web for.")
 
 
 def clean_chunk(text: str) -> str:
@@ -26,26 +32,8 @@ def search_stream(query: str, chat_history: list = None):
     # Initialize search tool
     search = DuckDuckGoSearchRun()
     
-    # Define tool for LLM in a more standard way
-    tools = [
-        {
-            "name": "browser_search",
-            "description": "Search the web for real-time information.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "query": {
-                        "type": "string",
-                        "description": "The search query to look up on the internet."
-                    }
-                },
-                "required": ["query"]
-            }
-        }
-    ]
-    
-    # Using bind_tools with tool_choice="auto" is often more stable for Groq
-    llm_with_tools = llm.bind_tools(tools)
+    # Bind tools using Pydantic (most robust for Groq)
+    llm_with_tools = llm.bind_tools([browser_search])
     
     messages = [SystemMessage(content=SYSTEM_PROMPT)]
     if chat_history:
@@ -61,32 +49,59 @@ def search_stream(query: str, chat_history: list = None):
         # Step 1: Get tool call from LLM
         response = llm_with_tools.invoke(messages)
         
-        if hasattr(response, 'tool_calls') and response.tool_calls:
-            tool_call = response.tool_calls[0]
+        # Groq sometimes returns tool_calls in different places, check both
+        tool_calls = getattr(response, 'tool_calls', [])
+        search_query = None
+        tool_call_id = None
+        
+        if tool_calls:
+            tool_call = tool_calls[0]
+            # Use the args from the Pydantic model
             search_query = tool_call["args"].get("query", query)
+            tool_call_id = tool_call["id"]
+        elif response.content:
+            # Fallback: model didn't use tool, just stream content if any
+            yield clean_chunk(response.content)
+            return
             
-            # Step 2: Execute search
-            with st.status(f"Searching for: {search_query}...", expanded=False) as status:
-                search_results = search.run(search_query)
-                status.update(label="Search complete!", state="complete")
-            
-            # Step 3: Feed results back to LLM
+    except Exception as e:
+        error_msg = str(e)
+        search_query = None
+        tool_call_id = None
+        
+        if "tool_use_failed" in error_msg and "failed_generation" in error_msg:
+            import json
+            match = re.search(r'<function=browser_search(.*?)</function>', error_msg)
+            if match:
+                try:
+                    args = json.loads(match.group(1))
+                    search_query = args.get("query", query)
+                    tool_call_id = "manual_fallback"
+                except Exception:
+                    pass
+                    
+        if not search_query:
+            yield f"Error in search: {error_msg}"
+            return
+
+    if search_query:
+        # Step 2: Execute search
+        with st.status(f"Searching for: {search_query}...", expanded=False) as status:
+            search_results = search.run(search_query)
+            status.update(label="Search complete!", state="complete")
+        
+        # Step 3: Feed results back to LLM
+        if "response" in locals():
             messages.append(response)
-            messages.append(AIMessage(content=f"Search Results:\n{search_results}", tool_call_id=tool_call["id"]))
+        else:
+            messages.append(AIMessage(content="", tool_calls=[{"name": "browser_search", "args": {"query": search_query}, "id": tool_call_id}]))
             
-            # Step 4: Stream final answer
+        messages.append(AIMessage(content=f"Search Results:\n{search_results}", tool_call_id=tool_call_id))
+        
+        # Step 4: Stream final answer
+        try:
             for chunk in llm.stream(messages):
                 if chunk.content:
                     yield clean_chunk(chunk.content)
-        else:
-            # Fallback: model didn't use tool, just stream content if any
-            if response.content:
-                yield clean_chunk(response.content)
-            else:
-                # If everything fails, just call llm directly
-                for chunk in llm.stream(messages):
-                    if chunk.content:
-                        yield clean_chunk(chunk.content)
-                        
-    except Exception as e:
-        yield f"Error in search: {str(e)}"
+        except Exception as e2:
+            yield f"Error in final generation: {str(e2)}"

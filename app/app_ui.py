@@ -1,7 +1,15 @@
 import streamlit as st
+import os
+import sys
+
+# Add the project root to sys.path to allow importing from 'agents' and 'utils'
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 from agents.search_agent import search_stream
 from agents.rag_agent import build_vector_store, ask_stream, get_retrieved_chunks
 from agents.ocr_agent import perform_ocr
+from agents.image_agent import generate_image
+from utils.db import init_db, save_message, load_history, clear_agent_history
 
 # ---- Page Config ----
 st.set_page_config(page_title="Agent Wolf", page_icon="🐺", layout="wide")
@@ -64,6 +72,7 @@ st.markdown("""
     .badge-search { background-color: rgba(99, 102, 241, 0.2); color: #818cf8; border-color: #6366f1; }
     .badge-rag { background-color: rgba(34, 197, 94, 0.2); color: #4ade80; border-color: #22c55e; }
     .badge-vision { background-color: rgba(234, 179, 8, 0.2); color: #facc15; border-color: #eab308; }
+    .badge-image { background-color: rgba(236, 72, 153, 0.2); color: #f472b6; border-color: #ec4899; }
 
     /* Sidebar Styling */
     section[data-testid="stSidebar"] {
@@ -147,13 +156,14 @@ with st.sidebar:
 
     st.markdown('<p class="sidebar-info">🐺 Agent Wolf Core <br> Powered by Groq Llama 3.3</p>', unsafe_allow_html=True)
 
-    agent_choice = st.radio("Select Capability:", ["🌐 Global Search", "📚 Knowledge Base (RAG)", "👁️ Vision Analysis"], index=0)
+    agent_choice = st.radio("Select Capability:", ["🌐 Global Search", "📚 Knowledge Base (RAG)", "👁️ Vision Analysis", "🎨 Image Generation"], index=0)
 
     # Map the display names back to logic names
     agent_logic_map = {
         "🌐 Global Search": "Search",
         "📚 Knowledge Base (RAG)": "RAG",
-        "👁️ Vision Analysis": "Vision (OCR)"
+        "👁️ Vision Analysis": "Vision (OCR)",
+        "🎨 Image Generation": "Image"
     }
     agent_choice_logic = agent_logic_map[agent_choice]
 
@@ -205,8 +215,10 @@ with st.sidebar:
             st.success("📚 Knowledge assimilated and ready.")
         else:
             st.warning("⚠️ Feed Wolf some documents first.")
-    else:
+    elif agent_choice_logic == "Vision (OCR)":
         st.info("👁️ Vision sensors active.")
+    else:
+        st.info("🎨 Image generation core online.")
 
     st.divider()
 
@@ -215,13 +227,17 @@ with st.sidebar:
         st.session_state.search_messages = []
         st.session_state.rag_messages = []
         st.session_state.vision_messages = []
+        st.session_state.image_messages = []
         clear_agent_history("Search")
         clear_agent_history("RAG")
         clear_agent_history("Vision")
+        clear_agent_history("Image")
         st.rerun()
 
     # Export chat button
-    current_key = "search_messages" if agent_choice_logic == "Search" else ("rag_messages" if agent_choice_logic == "RAG" else "vision_messages")
+    current_key = f"{agent_choice_logic.lower()}_messages"
+    if current_key == "vision (ocr)_messages": current_key = "vision_messages"
+    
     if current_key in st.session_state and st.session_state[current_key]:
         chat_export = ""
         for msg in st.session_state[current_key]:
@@ -241,25 +257,46 @@ if "rag_messages" not in st.session_state:
     st.session_state.rag_messages = []
 if "vision_messages" not in st.session_state:
     st.session_state.vision_messages = []
-
-from utils.db import init_db, save_message, load_history, clear_agent_history
+if "image_messages" not in st.session_state:
+    st.session_state.image_messages = []
 
 # Initialize Database
 init_db()
 
 # ---- Initialize Chat History (per agent) ----
-if "search_messages" not in st.session_state:
+if "search_messages" not in st.session_state or not st.session_state.search_messages:
     st.session_state.search_messages = load_history("Search")
-if "rag_messages" not in st.session_state:
+if "rag_messages" not in st.session_state or not st.session_state.rag_messages:
     st.session_state.rag_messages = load_history("RAG")
-if "vision_messages" not in st.session_state:
+if "vision_messages" not in st.session_state or not st.session_state.vision_messages:
     st.session_state.vision_messages = load_history("Vision")
+if "image_messages" not in st.session_state or not st.session_state.image_messages:
+    st.session_state.image_messages = load_history("Image")
+
+# ---- Persistent Vector Store Loading ----
+if "vector_store" not in st.session_state and os.path.exists("database/faiss_index"):
+    from langchain_huggingface import HuggingFaceEmbeddings
+    from langchain_community.vectorstores import FAISS
+    try:
+        embeddings = HuggingFaceEmbeddings(
+            model_name="sentence-transformers/all-MiniLM-L6-v2",
+            model_kwargs={'device': 'cpu'}
+        )
+        st.session_state.vector_store = FAISS.load_local(
+            "database/faiss_index", 
+            embeddings, 
+            allow_dangerous_deserialization=True
+        )
+    except Exception as e:
+        st.error(f"Error loading persistent intelligence: {e}")
 
 # Pick the right history based on agent
 if agent_choice_logic == "Search":
     messages = st.session_state.search_messages
 elif agent_choice_logic == "RAG":
     messages = st.session_state.rag_messages
+elif agent_choice_logic == "Image":
+    messages = st.session_state.image_messages
 else:
     messages = st.session_state.vision_messages
 
@@ -268,13 +305,16 @@ for message in messages:
     with st.chat_message(message["role"]):
         # Show agent badge on assistant messages
         if message["role"] == "assistant":
-            badge_class = "badge-search" if message.get("agent") == "Search" else ("badge-rag" if message.get("agent") == "RAG" else "badge-vision")
+            badge_class = "badge-search" if message.get("agent") == "Search" else ("badge-rag" if message.get("agent") == "RAG" else ("badge-image" if message.get("agent") == "Image" else "badge-vision"))
             badge_label = f"🐺 {message.get('agent', agent_choice_logic)}"
             st.markdown(
                 f'<span class="agent-badge {badge_class}">{badge_label}</span>',
                 unsafe_allow_html=True,
             )
         st.markdown(message["content"])
+
+        if message.get("image"):
+            st.image(message["image"])
 
         # Show retrieved chunks if available (RAG)
         if "metadata" in message and message["metadata"].get("chunks"):
@@ -292,14 +332,23 @@ if prompt := st.chat_input("Command Agent Wolf..."):
     # Generate streamed response
     with st.chat_message("assistant"):
         # Show agent badge
-        badge_class = "badge-search" if agent_choice_logic == "Search" else ("badge-rag" if agent_choice_logic == "RAG" else "badge-vision")
+        badge_class = "badge-search" if agent_choice_logic == "Search" else ("badge-rag" if agent_choice_logic == "RAG" else ("badge-image" if agent_choice_logic == "Image" else "badge-vision"))
         st.markdown(
             f'<span class="agent-badge {badge_class}">🐺 {agent_choice_logic}</span>',
             unsafe_allow_html=True,
         )
 
         try:
-            if agent_choice_logic == "Search":
+            if agent_choice_logic == "Image":
+                gen_image = generate_image(prompt)
+                st.image(gen_image)
+                success_msg = f"Painted: {prompt}"
+                messages.append({"role": "assistant", "content": success_msg, "agent": "Image", "image": gen_image})
+                
+                # convert image to bytes to save to DB (optional, but keep simple for now just save text)
+                save_message("Image", "assistant", success_msg, {"agent": "Image"})
+                
+            elif agent_choice_logic == "Search":
                 response = st.write_stream(search_stream(prompt, messages[:-1]))
                 messages.append({"role": "assistant", "content": response, "agent": "Search"})
                 save_message("Search", "assistant", response, {"agent": "Search"})
@@ -339,6 +388,9 @@ if prompt := st.chat_input("Command Agent Wolf..."):
             if "rate_limit" in error_msg.lower() or "429" in error_msg:
                 st.error("Rate limit reached. Please wait a moment and try again.")
             elif "api_key" in error_msg.lower() or "401" in error_msg:
-                st.error("Invalid API key. Please check your GROQ_API_KEY in the .env file.")
+                if agent_choice_logic == "Image":
+                    st.error("Invalid or missing Hugging Face API key. Please check your HUGGINGFACE_API_KEY in the .env file.")
+                else:
+                    st.error("Invalid API key. Please check your GROQ_API_KEY in the .env file.")
             else:
                 st.error(f"Something went wrong: {error_msg}")

@@ -3,12 +3,12 @@ import os
 import json
 from datetime import datetime
 
-DB_PATH = os.path.join("data", "wolf_history.db")
+DB_PATH = os.path.join("database", "wolf_history.db")
 
 def init_db():
     """Initializes the SQLite database."""
-    if not os.path.exists("data"):
-        os.makedirs("data")
+    if not os.path.exists("database"):
+        os.makedirs("database")
     
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
