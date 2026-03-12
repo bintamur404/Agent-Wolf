@@ -1,32 +1,19 @@
-.env
-# Environment variables
-
-# Python
-__pycache__/
-*.py[cod]
-*.egg-info/
-dist/
-build/
-
-# Virtual environment
+# Virtual Environments
 venv/
+env/
+.venv/
 
-# IDE
-.vscode/
-.idea/
-
-# Streamlit
+# Secrets and API Keys
+.env
 .streamlit/secrets.toml
 
-# OS
-Thumbs.db
-.DS_Store
-
-# Local Data & SQLite
-data/
-*.db
-faiss_index/
-
-# Temporary
+# Cache and Temp
+__pycache__/
+*.pyc
 tmp/
-error.log
+error
+
+# Local DBs and Indexes (Keep the folder structure, ignore the heavy data)
+database/*.db
+database/*.faiss
+database/*.pkl

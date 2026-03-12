@@ -1,56 +1,95 @@
-# 🐺 Agent Wolf: Elite Multi-Modal Research Assistant
+# Agent Wolf: Multi-Modal Research Copilot 🐺
 
-Agent Wolf is a high-performance, multi-modal AI platform designed for technical research, document analysis, and visual intelligence. Built on the **Groq LPU Inference Engine** and **LangChain**, it fulfills all requirements for the advanced AI/ML research assignment.
+> **Created by: Abdullah Ibne Tayeb Tamur**
 
-## 🔗 Live Tracing Link
-**Public LangSmith Trace**: [INSERT_YOUR_PUBLIC_LINK_HERE]
-*(Generate this link by clicking "Share" on your successful trace in the LangSmith dashboard)*
-
-## 🚀 Key Features & Compliance
-
-### 1. The Three Specialized Agents
-- **📚 Knowledge Core (RAG)**: Ingests PDFs/TXTs via `RecursiveCharacterTextSplitter`. Retrieves strictly **top 3 chunks (k=3)** for precision.
-- **🌐 Global Intelligence (Search)**: Real-time internet scanning via DuckDuckGo with full source citations.
-- **👁️ Vision Synthesis (OCR)**: Multi-modal analysis via **Llama 4 Scout** (17B) for visual data extraction.
-
-### 2. Technical Architecture
-- **LLM Engine**: Groq (Llama 3.3 70B & Llama 4 Scout).
-- **Embeddings**: `all-MiniLM-L6-v2` (running locally on **CPU**).
-- **Vector Storage**: **FAISS** (Local relational lookup).
-- **History Database**: **SQLite** (`database/wolf_history.db`).
-- **Observability**: Fully integrated with **LangSmith** for real-time telemetry.
-
-### 3. Modular Directory Structure
-```text
-Agent-Wolf-Researcher/
-├── app/                # UI Layer (Streamlit Frontend)
-├── agents/             # Logic Layer (Search, RAG, Vision)
-├── utils/              # Infra Layer (LLM, Database Utils)
-├── database/           # Persistence Layer (SQLite & FAISS Index)
-├── requirements.txt    # Dependency Graph
-└── .env                # Secure Environment (Hidden in Git)
-```
-
-## 🛠️ Setup & Deployment
-
-### Local Setup
-1. Copy `.env.example` to `.env` and add your keys.
-2. Ensure `.env` is the first line in your `.gitignore`.
-3. Run the app:
-   ```bash
-   streamlit run app/app_ui.py
-   ```
-
-### ☁️ Streamlit Cloud Deployment
-1. Push this repository to your GitHub.
-2. In Streamlit Cloud, go to **Settings > Secrets**.
-3. Inject your keys exactly as they appear in `.env`:
-   ```toml
-   GROQ_API_KEY = "gsk_..."
-   LANGCHAIN_API_KEY = "lsv2_pt_..."
-   LANGCHAIN_TRACING_V2 = "true"
-   LANGCHAIN_PROJECT = "Agent-Wolf"
-   ```
+This is a multi-agent system built for my AI/ML course. It features Web Search, Document Q&A (RAG via FAISS), and Vision/OCR capabilities utilizing Groq's high-speed Llama models and Streamlit.
 
 ---
-*Developed for AI/ML Research Portfolio* 🐺✨
+
+## 🔗 LangSmith Tracing (Live Observability)
+
+This project is fully integrated with **LangSmith** for real-time agent telemetry and trace inspection.
+
+- **Project Name:** `Agent_Wolf`
+- **Tracing:** Enabled via `LANGCHAIN_TRACING_V2=true`
+- **Endpoint:** `https://api.smith.langchain.com`
+
+> ℹ️ To view your own traces, sign up at [smith.langchain.com](https://smith.langchain.com) and add your `LANGCHAIN_API_KEY` to the `.env` file as described below.
+
+---
+
+## 🚀 How to Run the Project Locally
+
+### 1. Create and Activate the Virtual Environment
+
+To keep dependencies isolated, create a virtual environment (`venv`):
+
+**Windows:**
+```bash
+python -m venv venv
+venv\Scripts\activate
+```
+
+**Mac/Linux:**
+```bash
+python3 -m venv venv
+source venv/bin/activate
+```
+
+### 2. Install Dependencies
+```bash
+pip install -r requirements.txt
+```
+
+### 3. Required Files to Create (`.env`)
+
+For security, API keys are **not included** in this repository. You must create a `.env` file in the root directory (reference `.env.example`). It must contain:
+
+```env
+GROQ_API_KEY=your_groq_api_key_here
+LANGCHAIN_TRACING_V2=true
+LANGCHAIN_ENDPOINT="https://api.smith.langchain.com"
+LANGCHAIN_API_KEY=your_langsmith_api_key_here
+LANGCHAIN_PROJECT="Agent_Wolf"
+```
+
+### 4. Run the Application
+```bash
+streamlit run app/app_ui.py
+```
+
+---
+
+## 🏗️ Architecture
+
+```
+Agent-Wolf/
+├── app/                # UI Layer (Streamlit Frontend)
+├── agents/             # Logic Layer (Search, RAG, Vision, Image Gen)
+├── utils/              # Infra Layer (LLM factory, DB utils)
+├── database/           # Persistence Layer (SQLite history + FAISS index)
+├── requirements.txt    # Dependency graph
+└── .env.example        # Template for environment variables
+```
+
+### The Four Specialized Agents
+| Agent | Capability | Model |
+|-------|-----------|-------|
+| 🌐 Global Search | Real-time web search with DuckDuckGo | Llama 3.3 70B |
+| 📚 Knowledge Base (RAG) | Document Q&A via FAISS (k=3 retrieval) | Llama 3.3 70B |
+| 👁️ Vision Analysis | Multi-modal image understanding | Llama 4 Scout 17B |
+| 🎨 Image Generation | Text-to-image synthesis | Gemini 2.0 Flash |
+
+---
+
+## 📝 Remaining Problems & Discussion Points
+
+1. **Vector Database Deployment:** I implemented FAISS for local document retrieval to avoid the `sqlite-vec` Streamlit Cloud compilation crashes. I used standard SQLite for relational chat history. Is this hybrid DB approach acceptable for the final grading rubric?
+
+2. **Model Deprecation Handling:** The originally planned `llama-3.2-11b-vision-preview` was decommissioned by Groq. I migrated the OCR agent to `meta-llama/llama-4-scout-17b-16e-instruct`.
+
+3. **API Rate Limiting:** We need to discuss token management best practices (e.g., limiting FAISS retrieval to `k=3` chunks) to prevent hitting the `429 RESOURCE_EXHAUSTED` Groq limit during intensive RAG testing.
+
+---
+
+*Developed for AI/ML Research Portfolio — Agent Wolf by Abdullah Ibne Tayeb Tamur* 🐺✨
