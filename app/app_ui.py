@@ -331,13 +331,10 @@ if not st.session_state.gap_messages:
 
 # Persistent FAISS Index
 if "vector_store" not in st.session_state and os.path.exists("database/faiss_index"):
-    from langchain_community.embeddings import HuggingFaceEmbeddings
+    from utils.embeddings import SafeEmbeddings
     from langchain_community.vectorstores import FAISS
     try:
-        embeddings = HuggingFaceEmbeddings(
-            model_name="sentence-transformers/all-MiniLM-L6-v2",
-            model_kwargs={'device': 'cpu'}
-        )
+        embeddings = SafeEmbeddings()
         st.session_state.vector_store = FAISS.load_local(
             "database/faiss_index", embeddings, allow_dangerous_deserialization=True
         )

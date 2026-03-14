@@ -1,7 +1,7 @@
 from langchain_community.document_loaders import PyPDFLoader, TextLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
+from utils.embeddings import SafeEmbeddings
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 from utils.llm import get_llm
 import tempfile
@@ -45,12 +45,8 @@ def build_vector_store(uploaded_files):
     splitter = RecursiveCharacterTextSplitter(chunk_size=512, chunk_overlap=50)
     chunks = splitter.split_documents(all_docs)
 
-    # Create embeddings using the stable community loader (avoids meta tensor issue on Windows)
-    embeddings = HuggingFaceEmbeddings(
-        model_name="sentence-transformers/all-MiniLM-L6-v2",
-        model_kwargs={'device': 'cpu'},
-        encode_kwargs={'normalize_embeddings': True}
-    )
+    # Create embeddings using SafeEmbeddings (bypasses LangChain wrappers, avoids meta tensor error)
+    embeddings = SafeEmbeddings()
     vector_store = FAISS.from_documents(chunks, embeddings)
     
     # Save for persistence (as per requirement)
