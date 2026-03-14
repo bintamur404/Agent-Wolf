@@ -8,121 +8,230 @@ from agents.search_agent import search_stream
 from agents.rag_agent import build_vector_store, ask_stream, get_retrieved_chunks
 from agents.ocr_agent import perform_ocr
 from agents.image_agent import generate_image
-from agents.arxiv_agent import arxiv_scholar_stream
+from agents.arxiv_agent import search_arxiv, format_papers_for_llm
 from agents.research_agent import literature_review_stream, research_gap_stream
 from utils.db import init_db, save_message, load_history, clear_agent_history
+from utils.llm import get_llm
+from langchain_community.tools import DuckDuckGoSearchRun
 
-st.set_page_config(page_title="Agent Wolf", page_icon="🐺", layout="wide")
+st.set_page_config(
+    page_title="Agent Wolf",
+    page_icon="🐺",
+    layout="wide",
+    initial_sidebar_state="collapsed",
+)
 
+# ============================================================
+#  GEMINI-STYLE CSS — Clean, minimal dark. NOT cyberpunk.
+# ============================================================
 st.markdown("""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap');
-    html, body, [class*="css"] { font-family: 'Outfit', sans-serif; }
+    @import url('https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&family=Inter:wght@300;400;500;600&display=swap');
 
+    /* ---- Base ---- */
+    html, body, [class*="css"] {
+        font-family: 'Inter', 'Google Sans', sans-serif;
+    }
     .stApp {
-        background: linear-gradient(135deg, #0a0f1e 0%, #0f172a 50%, #1e1b4b 100%);
-        color: #e2e8f0;
+        background-color: #131314;
+        color: #e8eaed;
     }
 
-    .wolf-title {
-        font-size: 3rem; font-weight: 700;
-        background: linear-gradient(90deg, #6366f1, #a855f7, #ec4899);
-        -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-        text-align: center; letter-spacing: -1px; margin-bottom: 0.1rem;
-    }
-    .wolf-subtitle { color: #94a3b8; text-align: center; font-size: 1rem; margin-bottom: 0.15rem; }
-    .wolf-credit {
-        color: #6366f1; text-align: center; font-size: 0.78rem;
-        margin-bottom: 1.2rem; letter-spacing: .08em;
-        text-transform: uppercase; font-weight: 600;
+    /* ---- Hide Streamlit chrome ---- */
+    #MainMenu, footer, .stDeployButton { display: none !important; }
+    header[data-testid="stHeader"] { background: transparent !important; }
+
+    /* ---- Main container width constraint ---- */
+    .block-container {
+        max-width: 860px !important;
+        padding-top: 0.5rem !important;
+        padding-bottom: 1rem !important;
+        margin: 0 auto !important;
     }
 
+    /* ---- Header ---- */
+    .gw-header {
+        text-align: center;
+        padding: 2.4rem 0 0.5rem 0;
+    }
+    .gw-logo {
+        font-size: 2.6rem;
+        font-weight: 700;
+        background: linear-gradient(90deg, #4285f4, #9b59b6, #ea4335);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        letter-spacing: -0.5px;
+    }
+    .gw-tagline {
+        font-size: 0.9rem;
+        color: #9aa0a6;
+        margin-top: 0.2rem;
+        font-weight: 400;
+    }
+    .gw-credit {
+        font-size: 0.72rem;
+        color: #5f6368;
+        margin-top: 0.25rem;
+        letter-spacing: 0.04em;
+    }
+
+    /* ---- Mode Pill Bar ---- */
+    .gw-pill-bar {
+        display: flex;
+        gap: 6px;
+        justify-content: center;
+        flex-wrap: wrap;
+        margin: 1rem 0 0.6rem 0;
+    }
     div[data-testid="stHorizontalBlock"] .stButton > button {
         border-radius: 999px !important;
-        padding: 6px 12px !important;
         font-size: 0.8rem !important;
-        font-weight: 600 !important;
-        transition: all 0.2s ease !important;
+        font-weight: 500 !important;
+        padding: 6px 14px !important;
+        border: 1px solid #3c4043 !important;
+        background: #1e1f20 !important;
+        color: #9aa0a6 !important;
+        transition: all 0.18s ease !important;
         white-space: nowrap !important;
+        width: auto !important;
+    }
+    div[data-testid="stHorizontalBlock"] .stButton > button:hover {
+        background: #2a2b2d !important;
+        color: #e8eaed !important;
+        border-color: #5f6368 !important;
+    }
+    /* Primary (active) pill */
+    div[data-testid="stHorizontalBlock"] .stButton > button[kind="primary"] {
+        background: #1a3a5c !important;
+        color: #8ab4f8 !important;
+        border-color: #4285f4 !important;
     }
 
+    /* ---- Chat Messages ---- */
     .stChatMessage {
-        border-radius: 20px; border: 1px solid rgba(255,255,255,0.05);
-        background: rgba(255,255,255,0.03); backdrop-filter: blur(8px);
-        box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
-        margin-bottom: 1rem; padding: 1.5rem !important;
+        background: transparent !important;
+        border: none !important;
+        box-shadow: none !important;
+        padding: 0.6rem 0 !important;
+        margin-bottom: 0.2rem !important;
+    }
+    /* User bubble */
+    .stChatMessage[data-testid="stChatMessageUser"] {
+        background: #1e1f20 !important;
+        border-radius: 18px !important;
+        padding: 0.8rem 1.2rem !important;
+        max-width: 80%;
+        margin-left: auto !important;
+    }
+    /* Assistant area */
+    .stChatMessage[data-testid="stChatMessageAssistant"] {
+        padding: 0.6rem 0 !important;
     }
 
-    .agent-badge {
-        display: inline-flex; align-items: center;
-        padding: 4px 12px; border-radius: 20px; font-size: 0.8rem;
-        font-weight: 600; margin-bottom: 8px; border: 1px solid rgba(255,255,255,0.1);
+    /* ---- Agent label pill ---- */
+    .agent-label {
+        display: inline-flex; align-items: center; gap: 5px;
+        font-size: 0.75rem; font-weight: 600;
+        color: #8ab4f8; margin-bottom: 6px;
+        letter-spacing: 0.03em;
     }
-    .badge-search  { background-color: rgba(99,102,241,0.2);  color: #818cf8; border-color: #6366f1; }
-    .badge-rag     { background-color: rgba(34,197,94,0.2);   color: #4ade80; border-color: #22c55e; }
-    .badge-vision  { background-color: rgba(234,179,8,0.2);   color: #facc15; border-color: #eab308; }
-    .badge-image   { background-color: rgba(236,72,153,0.2);  color: #f472b6; border-color: #ec4899; }
-    .badge-arxiv   { background-color: rgba(14,165,233,0.2);  color: #38bdf8; border-color: #0ea5e9; }
-    .badge-litrev  { background-color: rgba(168,85,247,0.2);  color: #c084fc; border-color: #a855f7; }
-    .badge-gap     { background-color: rgba(239,68,68,0.2);   color: #f87171; border-color: #ef4444; }
+    .agent-label.lab-arxiv  { color: #81c995; }
+    .agent-label.lab-review { color: #c58af9; }
+    .agent-label.lab-gap    { color: #f28b82; }
+    .agent-label.lab-rag    { color: #81c995; }
+    .agent-label.lab-vision { color: #fdd663; }
+    .agent-label.lab-image  { color: #f28b82; }
 
-    section[data-testid="stSidebar"] {
-        background-color: rgba(10,15,30,0.92);
-        border-right: 1px solid rgba(255,255,255,0.07);
+    /* ---- Popover / Expander ---- */
+    .stPopover, .stExpander {
+        border: 1px solid #3c4043 !important;
+        background: #1e1f20 !important;
+        border-radius: 12px !important;
     }
-    .sidebar-card {
-        font-size: 0.85em; color: #94a3b8; padding: 12px;
-        background: rgba(255,255,255,0.05); border-radius: 12px; text-align: center;
-    }
-    .info-card {
-        border-radius: 12px; padding: 10px;
-        font-size: 0.83em; color: #94a3b8; margin-bottom: 8px;
-    }
-    .info-card.blue   { background: rgba(14,165,233,0.08);  border: 1px solid rgba(14,165,233,0.25); }
-    .info-card.purple { background: rgba(168,85,247,0.08);  border: 1px solid rgba(168,85,247,0.25); }
-    .info-card.red    { background: rgba(239,68,68,0.08);   border: 1px solid rgba(239,68,68,0.25); }
-    .info-card.green  { background: rgba(34,197,94,0.08);   border: 1px solid rgba(34,197,94,0.25); }
-    .info-card.yellow { background: rgba(234,179,8,0.08);   border: 1px solid rgba(234,179,8,0.25); }
 
+    /* ---- Chat input ---- */
+    .stChatInputContainer, div[data-testid="stChatInput"] > div {
+        background: #1e1f20 !important;
+        border: 1px solid #3c4043 !important;
+        border-radius: 24px !important;
+    }
+    .stChatInputContainer:focus-within, div[data-testid="stChatInput"] > div:focus-within {
+        border-color: #4285f4 !important;
+        box-shadow: 0 0 0 2px rgba(66,133,244,0.18) !important;
+    }
+
+    /* ---- Generic button (non-pill) ---- */
     .stButton > button {
-        border-radius: 12px;
-        background: linear-gradient(90deg, #6366f1, #a855f7);
-        color: white; border: none; transition: all 0.3s ease; width: 100%;
+        border-radius: 8px;
+        background: #1e1f20;
+        color: #e8eaed;
+        border: 1px solid #3c4043;
+        transition: all 0.15s;
     }
     .stButton > button:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 10px 15px -3px rgba(99,102,241,0.4);
+        background: #2a2b2d;
+        border-color: #5f6368;
     }
-    .stExpander {
-        border: 1px solid rgba(255,255,255,0.05) !important;
-        border-radius: 12px !important; background: rgba(255,255,255,0.02) !important;
+
+    /* ---- File uploader ---- */
+    [data-testid="stFileUploaderDropzone"] {
+        background: #1e1f20 !important;
+        border: 1px dashed #3c4043 !important;
+        border-radius: 12px !important;
     }
-    .wolf-footer {
-        text-align: center; color: #334155; font-size: 0.76rem;
-        margin-top: 1.5rem; padding-top: 1rem;
-        border-top: 1px solid rgba(255,255,255,0.04);
+
+    /* ---- Attachment badge ---- */
+    .att-badge {
+        display: inline-flex; align-items: center; gap: 8px;
+        font-size: 0.78rem; color: #81c995;
+        background: rgba(129,201,149,0.1);
+        border: 1px solid rgba(129,201,149,0.3);
+        border-radius: 999px; padding: 4px 12px;
+        margin-bottom: 6px;
     }
-    .wolf-footer span { color: #6366f1; }
-    .toolbar-divider {
-        height: 1px; background: rgba(255,255,255,0.06);
-        margin: 6px 0 10px 0; border-radius: 1px;
+    .att-badge-img {
+        display: inline-flex; align-items: center; gap: 8px;
+        font-size: 0.78rem; color: #fdd663;
+        background: rgba(253,214,99,0.1);
+        border: 1px solid rgba(253,214,99,0.3);
+        border-radius: 999px; padding: 4px 12px;
+        margin-bottom: 6px;
     }
-    .attach-panel {
-        background: rgba(255,255,255,0.04);
-        border: 1px solid rgba(255,255,255,0.1);
-        border-radius: 16px; padding: 16px; margin: 8px 0 12px 0;
+
+    /* ---- Status/thinking block ---- */
+    [data-testid="stStatus"], [data-testid="stStatusWidget"] {
+        background: #1e1f20 !important;
+        border: 1px solid #3c4043 !important;
+        border-radius: 10px !important;
+        font-size: 0.83rem !important;
+        color: #9aa0a6 !important;
     }
-    .attach-badge-pdf {
-        display: inline-flex; align-items: center; gap: 6px;
-        padding: 5px 14px; border-radius: 999px;
-        background: rgba(34,197,94,0.15); border: 1px solid #22c55e;
-        color: #4ade80; font-size: 0.8rem; margin-bottom: 8px;
+
+    /* ---- Source expander ---- */
+    .src-expander {
+        font-size: 0.78rem;
+        color: #9aa0a6;
+        margin-top: 8px;
     }
-    .attach-badge-img {
-        display: inline-flex; align-items: center; gap: 6px;
-        padding: 5px 14px; border-radius: 999px;
-        background: rgba(234,179,8,0.15); border: 1px solid #eab308;
-        color: #facc15; font-size: 0.8rem; margin-bottom: 8px;
+
+    /* ---- Divider ---- */
+    hr { border-color: #2a2b2d !important; }
+
+    /* ---- Footer ---- */
+    .gw-footer {
+        text-align: center;
+        font-size: 0.72rem;
+        color: #3c4043;
+        margin-top: 2rem;
+        padding-top: 0.8rem;
+        border-top: 1px solid #2a2b2d;
+    }
+    .gw-footer a { color: #5f6368; text-decoration: none; }
+
+    /* ---- Sidebar ---- */
+    section[data-testid="stSidebar"] {
+        background: #1e1f20 !important;
+        border-right: 1px solid #2a2b2d !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -131,55 +240,60 @@ st.markdown("""
 #  CONSTANTS
 # ============================================================
 MODES = [
-    ("Search",    "🌐", "Global Search",  "badge-search",  "active-search"),
-    ("ArXiv",     "🔬", "ArXiv Scholar",  "badge-arxiv",   "active-arxiv"),
-    ("LitReview", "📖", "Lit Review",     "badge-litrev",  "active-litrev"),
-    ("GapFinder", "🕵️", "Gap Finder",    "badge-gap",     "active-gap"),
-    ("RAG",       "📚", "Knowledge Base", "badge-rag",     "active-rag"),
-    ("Vision",    "👁️", "Vision",         "badge-vision",  "active-vision"),
-    ("Image",     "🎨", "Image Gen",      "badge-image",   "active-image"),
+    ("Search",    "🌐", "Web Search"),
+    ("ArXiv",     "🔬", "ArXiv Scholar"),
+    ("LitReview", "📖", "Lit Review"),
+    ("GapFinder", "🕵️", "Gap Finder"),
+    ("RAG",       "📚", "Knowledge Base"),
+    ("Vision",    "👁️",  "Vision"),
+    ("Image",     "🎨", "Image Gen"),
 ]
 
-PLACEHOLDERS = {
-    "Search":    "Search the web... e.g. 'Latest AI breakthroughs 2025'",
-    "ArXiv":     "Search papers... e.g. 'Transformer attention mechanisms'",
-    "LitReview": "Write a review on... e.g. 'LLM hallucination detection'",
-    "GapFinder": "Find research gaps in... e.g. 'Federated learning healthcare'",
-    "RAG":       "Ask about your uploaded document...",
-    "Vision":    "Click ➕ to attach an image, then ask about it here...",
-    "Image":     "Generate an image... e.g. 'A wolf in a neon quantum lab'",
+LABEL_MAP = {
+    "Search":    "🌐 Web Search",
+    "ArXiv":     "🔬 ArXiv Scholar",
+    "LitReview": "📖 Lit Review",
+    "GapFinder": "🕵️ Gap Finder",
+    "RAG":       "📚 Knowledge Base",
+    "Vision":    "👁️ Vision",
+    "Image":     "🎨 Image Gen",
 }
 
-badge_map = {
-    "Search": "badge-search", "ArXiv": "badge-arxiv", "LitReview": "badge-litrev",
-    "GapFinder": "badge-gap", "RAG": "badge-rag", "Vision": "badge-vision", "Image": "badge-image",
+LABEL_CLASS = {
+    "Search": "", "ArXiv": "lab-arxiv", "LitReview": "lab-review",
+    "GapFinder": "lab-gap", "RAG": "lab-rag", "Vision": "lab-vision", "Image": "lab-image",
 }
-label_map = {
-    "Search": "🌐 Global Search", "ArXiv": "🔬 ArXiv Scholar", "LitReview": "📖 Lit Review",
-    "GapFinder": "🕵️ Gap Finder", "RAG": "📚 Knowledge Base", "Vision": "👁️ Vision", "Image": "🎨 Image Gen",
+
+HINTS = {
+    "Search":    "Ask anything — Wolf searches the web for you...",
+    "ArXiv":     "Search academic papers... e.g. 'attention mechanisms 2024'",
+    "LitReview": "Generate a lit review on... e.g. 'LLM hallucination'",
+    "GapFinder": "Find research gaps in... e.g. 'federated learning'",
+    "RAG":       "Ask about your document...",
+    "Vision":    "Attach an image via ➕, then ask about it here...",
+    "Image":     "Describe what to generate... e.g. 'A wolf in a Tokyo lab'",
 }
 
 # ============================================================
-#  SESSION STATE INIT
+#  SESSION STATE
 # ============================================================
 init_db()
 
-defaults = {
+_defaults = {
     "active_mode":    "Search",
-    "show_attach":    False,
     "attached_pdf":   None,
     "attached_image": None,
 }
-for k, v in defaults.items():
+for k, v in _defaults.items():
     if k not in st.session_state:
         st.session_state[k] = v
 
-for m, _, _, _, _ in MODES:
+for m, _, _ in MODES:
     key = f"msgs_{m}"
     if key not in st.session_state:
         st.session_state[key] = []
 
-for m, _, _, _, _ in MODES:
+for m, _, _ in MODES:
     key = f"msgs_{m}"
     if not st.session_state[key]:
         st.session_state[key] = load_history(m)
@@ -195,77 +309,88 @@ if "vector_store" not in st.session_state and os.path.exists("database/faiss_ind
         pass
 
 # ============================================================
-#  SIDEBAR — context info only
+#  SIDEBAR — minimal
 # ============================================================
 with st.sidebar:
-    st.markdown(
-        '<div class="sidebar-card">🐺 <b>Agent Wolf v2.0</b><br>'
-        'Groq Llama 3.3 · ArXiv · FAISS<br>'
-        '<span style="color:#6366f1;font-size:0.8em">Research Edition</span></div>',
-        unsafe_allow_html=True,
-    )
+    st.markdown("### 🐺 Agent Wolf v2.0")
+    st.caption("Research Edition · Groq Llama 3.3")
     st.divider()
 
-    _m = st.session_state.active_mode
-    info_cards = {
-        "Search":    ('<div class="info-card blue">🌐 <b>Global Search</b><br>Live web search via DuckDuckGo with source citations.</div>'),
-        "ArXiv":     ('<div class="info-card blue">🔬 <b>ArXiv Scholar</b><br>Search 2M+ real papers — abstracts, PDF links, AI synthesis.</div>'),
-        "LitReview": ('<div class="info-card purple">📖 <b>Literature Review</b><br>Creates a full 5-section academic review from ArXiv + web.</div>'),
-        "GapFinder": ('<div class="info-card red">🕵️ <b>Research Gap Finder</b><br>Pinpoints unexplored areas and suggests your next paper.</div>'),
-        "RAG":       ('<div class="info-card green">📚 <b>Knowledge Base</b><br>Click ➕ in chat to upload a PDF/TXT, then ask questions.</div>'),
-        "Vision":    ('<div class="info-card yellow">👁️ <b>Vision Analysis</b><br>Click ➕ in chat to attach an image, then ask about it.</div>'),
-        "Image":     ('<div class="info-card" style="background:rgba(236,72,153,0.08);border:1px solid rgba(236,72,153,0.25)">🎨 <b>Image Generation</b><br>Describe anything and Wolf will paint it with AI.</div>'),
-    }
-    st.markdown(info_cards.get(_m, ""), unsafe_allow_html=True)
-
-    if _m == "RAG" and "vector_store" in st.session_state:
-        st.success("📚 Knowledge base loaded and ready!")
-    if _m == "Vision" and st.session_state.attached_image:
-        st.success(f"🖼️ Image attached: {st.session_state.attached_image['name']}")
+    mode_sb = st.session_state.active_mode
+    if mode_sb == "RAG":
+        if "vector_store" in st.session_state:
+            st.success("📚 Knowledge base ready")
+        else:
+            st.info("Upload a PDF via the ➕ attach button in chat")
+    elif mode_sb == "Vision" and st.session_state.attached_image:
+        st.success(f"🖼️ {st.session_state.attached_image['name']}")
 
     st.divider()
-    if st.button("🗑️ Wipe Session"):
-        for m, _, _, _, _ in MODES:
+    if st.button("🗑️ Clear session"):
+        for m, _, _ in MODES:
             st.session_state[f"msgs_{m}"] = []
             clear_agent_history(m)
         st.session_state.attached_pdf   = None
         st.session_state.attached_image = None
         st.rerun()
 
-    current_msgs = st.session_state.get(f"msgs_{_m}", [])
-    if current_msgs:
-        export_text = ""
-        for msg in current_msgs:
-            role_name = "You" if msg["role"] == "user" else f"Wolf ({msg.get('agent', _m)})"
-            export_text += f"**{role_name}:**\n{msg['content']}\n\n---\n\n"
-        st.download_button("💾 Export Chat", data=export_text,
-                           file_name=f"wolf_{_m.lower()}_chat.md", mime="text/markdown")
-
-# ============================================================
-#  MAIN AREA — HEADER
-# ============================================================
-st.markdown('<div class="wolf-title">🐺 Agent Wolf</div>', unsafe_allow_html=True)
-st.markdown('<div class="wolf-subtitle">Elite AI Research Copilot — Web · ArXiv · Vision · Knowledge</div>', unsafe_allow_html=True)
-st.markdown('<div class="wolf-credit">✦ Deployed by Abdullah Ibne Tayeb Tamur ✦</div>', unsafe_allow_html=True)
-
-
-def render_chunks(chunks):
-    for i, chunk in enumerate(chunks, 1):
-        relevance = chunk.get("relevance", 0)
-        score     = chunk.get("score", 0)
-        source    = chunk.get("source", "Unknown")
-        page      = chunk.get("page")
-        page_info = f" | Page {page + 1}" if page is not None else ""
-        color_cls = "relevance-high" if relevance >= 60 else ("relevance-mid" if relevance >= 40 else "relevance-low")
-        st.markdown(
-            f'<div class="chunk-header"><strong>Chunk {i}</strong>'
-            f'<span class="chunk-meta"><span class="{color_cls}">Relevance: {relevance}%</span>'
-            f' | Score: {score:.3f}{page_info} | {source}</span></div>',
-            unsafe_allow_html=True,
+    _cur = st.session_state.get(f"msgs_{mode_sb}", [])
+    if _cur:
+        _exp = "\n\n".join(
+            f"**{'You' if m['role']=='user' else 'Wolf'}:** {m['content']}"
+            for m in _cur
         )
-        st.code(chunk["content"], language=None)
+        st.download_button("💾 Export chat", data=_exp,
+                           file_name=f"wolf_{mode_sb}.md", mime="text/markdown")
+    st.divider()
+    st.caption("Engineered by **Abdullah Ibne Tayeb Tamur**")
+
+# ============================================================
+#  HEADER
+# ============================================================
+st.markdown("""
+<div class="gw-header">
+  <div class="gw-logo">🐺 Agent Wolf</div>
+  <div class="gw-tagline">Multi-Modal AI Research Copilot</div>
+  <div class="gw-credit">Deployed by Abdullah Ibne Tayeb Tamur</div>
+</div>
+""", unsafe_allow_html=True)
+
+# ============================================================
+#  MODE PILL BAR  (horizontal, centered, at top of chat)
+# ============================================================
+pill_cols = st.columns(len(MODES))
+for i, (m_key, emoji, label) in enumerate(MODES):
+    is_active = (st.session_state.active_mode == m_key)
+    with pill_cols[i]:
+        t = "primary" if is_active else "secondary"
+        if st.button(f"{emoji} {label}", key=f"pill_{m_key}", type=t, use_container_width=True):
+            st.session_state.active_mode = m_key
+            st.rerun()
+
+st.divider()
+
+
+# ============================================================
+#  HELPERS
+# ============================================================
+def render_chunks(chunks):
+    for i, c in enumerate(chunks, 1):
+        rel   = c.get("relevance", 0)
+        score = c.get("score", 0)
+        src   = c.get("source", "?")
+        pg    = c.get("page")
+        pg_s  = f" · p.{pg+1}" if pg is not None else ""
+        st.markdown(f"**Chunk {i}** — `{rel}%` relevance · dist `{score:.3f}`{pg_s} · *{src}*")
+        st.code(c["content"], language=None)
         if i < len(chunks):
             st.divider()
+
+
+def agent_label(mode: str):
+    lbl = LABEL_MAP.get(mode, mode)
+    cls = LABEL_CLASS.get(mode, "")
+    st.markdown(f'<div class="agent-label {cls}">{lbl}</div>', unsafe_allow_html=True)
 
 
 # ============================================================
@@ -274,220 +399,257 @@ def render_chunks(chunks):
 mode     = st.session_state.active_mode
 messages = st.session_state[f"msgs_{mode}"]
 
-for message in messages:
-    with st.chat_message(message["role"]):
-        if message["role"] == "assistant":
-            bc  = badge_map.get(message.get("agent", mode), "badge-search")
-            lbl = label_map.get(message.get("agent", mode), "🐺 Wolf")
-            st.markdown(f'<span class="agent-badge {bc}">{lbl}</span>', unsafe_allow_html=True)
-        st.markdown(message["content"])
-        if message.get("image"):
-            st.image(message["image"])
-        if "metadata" in message and message["metadata"].get("chunks"):
-            with st.expander("📂 Source Fragments"):
-                render_chunks(message["metadata"]["chunks"])
+for msg in messages:
+    with st.chat_message(msg["role"]):
+        if msg["role"] == "assistant":
+            agent_label(msg.get("agent", mode))
+        st.markdown(msg["content"])
+        if msg.get("image"):
+            st.image(msg["image"])
+        if "metadata" in msg and msg["metadata"].get("chunks"):
+            with st.expander("📂 Source fragments", expanded=False):
+                render_chunks(msg["metadata"]["chunks"])
 
 # ============================================================
-#  TOOLBAR: [➕] + Mode Pills
+#  ATTACHMENT STATUS BADGE
 # ============================================================
-st.markdown('<div class="toolbar-divider"></div>', unsafe_allow_html=True)
-
-attach_col, *pill_cols = st.columns([0.45] + [1] * len(MODES))
-
-with attach_col:
-    attach_label = "✖ Close" if st.session_state.show_attach else "➕ Attach"
-    if st.button(attach_label, key="attach_toggle", use_container_width=True,
-                 help="Attach a PDF, TXT, or Image"):
-        st.session_state.show_attach = not st.session_state.show_attach
-        st.rerun()
-
-for i, (m_key, emoji, label, _, _ac) in enumerate(MODES):
-    is_active = (st.session_state.active_mode == m_key)
-    with pill_cols[i]:
-        btn_type = "primary" if is_active else "secondary"
-        if st.button(f"{emoji} {label}", key=f"pill_{m_key}", type=btn_type, use_container_width=True):
-            st.session_state.active_mode = m_key
-            st.rerun()
-
-# ============================================================
-#  ATTACH PANEL (opens when ➕ is clicked)
-# ============================================================
-if st.session_state.show_attach:
-    st.markdown('<div class="attach-panel">', unsafe_allow_html=True)
-    st.markdown("##### 📎 Attach a file — choose type below")
-    left_col, right_col = st.columns(2)
-
-    # -- PDF / TXT --
-    with left_col:
-        st.markdown("**📄 Document** → switches to *Knowledge Base* mode")
-        doc_file = st.file_uploader("Upload PDF or TXT", type=["pdf", "txt"],
-                                    key="attach_doc", label_visibility="collapsed")
-        if doc_file:
-            st.caption(f"📄 *{doc_file.name}* ready to process")
-            if st.button("✅ Load Document", key="load_doc"):
-                with st.spinner(f"Processing {doc_file.name}..."):
-                    try:
-                        st.session_state.vector_store = build_vector_store([doc_file])
-                        st.session_state.attached_pdf   = doc_file.name
-                        st.session_state.attached_image = None
-                        st.session_state.active_mode    = "RAG"
-                        st.session_state.show_attach    = False
-                        st.success(f"✅ '{doc_file.name}' loaded! Ask your questions below.")
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"Error: {e}")
-
-    # -- Image --
-    with right_col:
-        st.markdown("**🖼️ Image** → switches to *Vision Analysis* mode")
-        img_file = st.file_uploader("Upload Image", type=["png", "jpg", "jpeg"],
-                                    key="attach_img", label_visibility="collapsed")
-        if img_file:
-            st.image(img_file, use_container_width=True, caption=img_file.name)
-            if st.button("✅ Analyze Image", key="analyze_img"):
-                with st.spinner(f"Analyzing {img_file.name}..."):
-                    try:
-                        extracted = perform_ocr(img_file.read())
-                        st.session_state.attached_image = {"name": img_file.name, "text": extracted}
-                        st.session_state.attached_pdf   = None
-                        st.session_state.active_mode    = "Vision"
-                        st.session_state.show_attach    = False
-                        # Auto-post the extraction to Vision chat
-                        st.session_state["msgs_Vision"].append(
-                            {"role": "user", "content": f"📷 Attached: **{img_file.name}**"}
-                        )
-                        st.session_state["msgs_Vision"].append(
-                            {"role": "assistant", "content": extracted, "agent": "Vision"}
-                        )
-                        save_message("Vision", "user",      f"📷 Attached: {img_file.name}")
-                        save_message("Vision", "assistant", extracted, {"agent": "Vision"})
-                        st.success("✅ Image analyzed! Ask follow-up questions below.")
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"Vision error: {e}")
-
-    # Clear attachment
-    if st.session_state.attached_pdf or st.session_state.attached_image:
-        if st.button("🗑️ Remove current attachment", key="clear_attach"):
-            st.session_state.attached_pdf   = None
-            st.session_state.attached_image = None
-            st.session_state.show_attach    = False
-            st.rerun()
-
-    st.markdown('</div>', unsafe_allow_html=True)
-
-# ---- Attachment Status Badge ----
 if st.session_state.attached_pdf:
     st.markdown(
-        f'<div class="attach-badge-pdf">📄 {st.session_state.attached_pdf} &nbsp;·&nbsp; <em>Knowledge Base ready — pick a mode and ask</em></div>',
+        f'<div class="att-badge">📄 {st.session_state.attached_pdf} &nbsp;·&nbsp; Knowledge Base ready</div>',
         unsafe_allow_html=True,
     )
 elif st.session_state.attached_image:
     st.markdown(
-        f'<div class="attach-badge-img">🖼️ {st.session_state.attached_image["name"]} &nbsp;·&nbsp; <em>Vision analysis complete — ask follow-up questions</em></div>',
+        f'<div class="att-badge-img">🖼️ {st.session_state.attached_image["name"]} &nbsp;·&nbsp; Vision ready</div>',
         unsafe_allow_html=True,
     )
 
 # ============================================================
-#  CHAT INPUT
+#  INPUT ROW:  [➕ Attach popover]  [chat input]
 # ============================================================
-mode     = st.session_state.active_mode
-messages = st.session_state[f"msgs_{mode}"]
-hint     = PLACEHOLDERS.get(mode, "Command Agent Wolf...")
+input_left, input_right = st.columns([0.08, 0.92])
 
-if prompt := st.chat_input(hint):
+with input_left:
+    with st.popover("➕", help="Attach a PDF, image, or document"):
+        st.markdown("#### 📎 Attach a file")
+        tab_doc, tab_img = st.tabs(["📄 Document (PDF/TXT)", "🖼️ Image (PNG/JPG)"])
+
+        with tab_doc:
+            st.caption("Wolf will read this document and switch to **Knowledge Base** mode.")
+            doc_up = st.file_uploader("Drop PDF or TXT", type=["pdf", "txt"],
+                                      key="pop_doc", label_visibility="collapsed")
+            if doc_up and st.button("✅ Load document", key="load_pop_doc"):
+                with st.spinner(f"Processing {doc_up.name}..."):
+                    try:
+                        st.session_state.vector_store = build_vector_store([doc_up])
+                        st.session_state.attached_pdf   = doc_up.name
+                        st.session_state.attached_image = None
+                        st.session_state.active_mode    = "RAG"
+                        st.success("✅ Done — ask your question below!")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Error: {e}")
+
+        with tab_img:
+            st.caption("Wolf will analyze this image. Switch to **Vision** mode to ask follow-up questions.")
+            img_up = st.file_uploader("Drop image", type=["png", "jpg", "jpeg"],
+                                      key="pop_img", label_visibility="collapsed")
+            if img_up:
+                st.image(img_up, use_container_width=True)
+            if img_up and st.button("✅ Analyze image", key="analyze_pop_img"):
+                with st.spinner(f"Analyzing {img_up.name}..."):
+                    try:
+                        extracted = perform_ocr(img_up.read())
+                        st.session_state.attached_image = {"name": img_up.name, "text": extracted}
+                        st.session_state.attached_pdf   = None
+                        st.session_state.active_mode    = "Vision"
+                        st.session_state["msgs_Vision"].append(
+                            {"role": "user", "content": f"📷 Attached: **{img_up.name}**"}
+                        )
+                        st.session_state["msgs_Vision"].append(
+                            {"role": "assistant", "content": extracted, "agent": "Vision"}
+                        )
+                        save_message("Vision", "user",      f"📷 Attached: {img_up.name}")
+                        save_message("Vision", "assistant", extracted, {"agent": "Vision"})
+                        st.success("✅ Image analyzed — ask follow-up questions below!")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Error: {e}")
+
+        if st.session_state.attached_pdf or st.session_state.attached_image:
+            if st.button("🗑️ Remove attachment", key="rm_attach"):
+                st.session_state.attached_pdf   = None
+                st.session_state.attached_image = None
+                st.rerun()
+
+# ============================================================
+#  CHAT INPUT (right column, full width feel)
+# ============================================================
+with input_right:
+    mode     = st.session_state.active_mode
+    messages = st.session_state[f"msgs_{mode}"]
+    prompt   = st.chat_input(HINTS.get(mode, "Ask Wolf anything..."))
+
+if prompt:
     messages.append({"role": "user", "content": prompt})
     save_message(mode, "user", prompt)
     with st.chat_message("user"):
         st.markdown(prompt)
 
     with st.chat_message("assistant"):
-        bc  = badge_map.get(mode, "badge-search")
-        lbl = label_map.get(mode, "🐺 Wolf")
-        st.markdown(f'<span class="agent-badge {bc}">{lbl}</span>', unsafe_allow_html=True)
+        agent_label(mode)
 
         try:
+            # ---- 🌐 Web Search ----
             if mode == "Search":
-                response = st.write_stream(search_stream(prompt, messages[:-1]))
-                messages.append({"role": "assistant", "content": response, "agent": "Search"})
-                save_message("Search", "assistant", response, {"agent": "Search"})
+                with st.status("🌐 Searching the web...", expanded=True) as tool_status:
+                    ddg   = DuckDuckGoSearchRun()
+                    query = prompt
+                    st.write(f"**Query:** `{query}`")
+                    web_r = ddg.run(query)
+                    tool_status.update(label="✅ Web search complete", state="complete", expanded=False)
 
+                # Stream synthesis
+                from langchain_core.messages import SystemMessage, HumanMessage
+                llm  = get_llm()
+                resp = st.write_stream(
+                    c.content for c in llm.stream([
+                        SystemMessage(content=(
+                            "You are a concise web research assistant. Summarize the search results below "
+                            "clearly. Cite sources if URLs appear in the results. Be direct and useful.\n\n"
+                            f"Search results:\n{web_r}"
+                        )),
+                        HumanMessage(content=prompt),
+                    ]) if c.content
+                )
+                messages.append({"role": "assistant", "content": resp, "agent": "Search"})
+                save_message("Search", "assistant", resp, {"agent": "Search"})
+
+            # ---- 🔬 ArXiv Scholar ----
             elif mode == "ArXiv":
-                response = st.write_stream(arxiv_scholar_stream(prompt))
-                messages.append({"role": "assistant", "content": response, "agent": "ArXiv"})
-                save_message("ArXiv", "assistant", response, {"agent": "ArXiv"})
+                with st.status("🔬 Searching ArXiv database...", expanded=True) as tool_status:
+                    st.write(f"**Query:** `{prompt}`")
+                    papers = search_arxiv(prompt, max_results=5)
+                    tool_status.update(label=f"✅ Found {len(papers)} papers", state="complete", expanded=False)
 
-            elif mode == "LitReview":
-                response = st.write_stream(literature_review_stream(prompt))
-                messages.append({"role": "assistant", "content": response, "agent": "LitReview"})
-                save_message("LitReview", "assistant", response, {"agent": "LitReview"})
-
-            elif mode == "GapFinder":
-                response = st.write_stream(research_gap_stream(prompt))
-                messages.append({"role": "assistant", "content": response, "agent": "GapFinder"})
-                save_message("GapFinder", "assistant", response, {"agent": "GapFinder"})
-
-            elif mode == "RAG":
-                if "vector_store" not in st.session_state:
-                    r = "🐺 No document loaded yet. Click **➕ Attach** to upload a PDF or TXT first!"
-                    st.markdown(r)
-                    messages.append({"role": "assistant", "content": r, "agent": "RAG"})
+                if not papers:
+                    st.warning("No papers found. Try broader terms.")
                 else:
-                    chunks   = get_retrieved_chunks(prompt, st.session_state.vector_store)
-                    response = st.write_stream(ask_stream(prompt, st.session_state.vector_store, messages[:-1]))
-                    with st.expander("📂 Source Fragments"):
-                        render_chunks(chunks)
-                    messages.append({"role": "assistant", "content": response, "agent": "RAG",
-                                     "metadata": {"chunks": chunks}})
-                    save_message("RAG", "assistant", response, {"agent": "RAG", "chunks": chunks})
+                    st.markdown("**📄 Papers found:**")
+                    for i, p in enumerate(papers, 1):
+                        with st.expander(f"[{i}] {p['title']} — {p['authors']} ({p['year']})", expanded=False):
+                            st.caption(f"Categories: `{p['categories']}`")
+                            st.write(p["abstract"])
+                            c1, c2 = st.columns(2)
+                            c1.markdown(f"[🔗 ArXiv]({p['url']})")
+                            c2.markdown(f"[📥 PDF]({p['pdf_url']})")
 
-            elif mode == "Image":
-                gen_image = generate_image(prompt)
-                st.image(gen_image)
-                success_msg = f"🎨 Generated: *{prompt}*"
-                messages.append({"role": "assistant", "content": success_msg,
-                                 "agent": "Image", "image": gen_image})
-                save_message("Image", "assistant", success_msg, {"agent": "Image"})
-
-            elif mode == "Vision":
-                if st.session_state.attached_image:
-                    from utils.llm import get_llm
                     from langchain_core.messages import SystemMessage, HumanMessage
                     llm = get_llm()
+                    st.markdown("**🧠 Synthesis:**")
+                    resp = st.write_stream(
+                        c.content for c in llm.stream([
+                            SystemMessage(content=(
+                                "Synthesize the key findings from these ArXiv papers. "
+                                "Cite each paper by [[Title]](url). End with 3-5 Key Takeaways."
+                            )),
+                            HumanMessage(content=(
+                                f"Query: {prompt}\n\n"
+                                f"Papers:\n{format_papers_for_llm(papers)}"
+                            )),
+                        ]) if c.content
+                    )
+                    messages.append({"role": "assistant", "content": resp, "agent": "ArXiv"})
+                    save_message("ArXiv", "assistant", resp, {"agent": "ArXiv"})
+
+            # ---- 📖 Literature Review ----
+            elif mode == "LitReview":
+                with st.status("📖 Gathering sources for literature review...", expanded=True) as ts:
+                    st.write(f"**Topic:** `{prompt}`")
+                    ddg    = DuckDuckGoSearchRun()
+                    papers = search_arxiv(prompt, max_results=6)
+                    web_r  = ddg.run(f"{prompt} research 2024 2025")
+                    ts.update(label=f"✅ {len(papers)} papers + web context", state="complete", expanded=False)
+                resp = st.write_stream(literature_review_stream(prompt))
+                messages.append({"role": "assistant", "content": resp, "agent": "LitReview"})
+                save_message("LitReview", "assistant", resp, {"agent": "LitReview"})
+
+            # ---- 🕵️ Research Gap Finder ----
+            elif mode == "GapFinder":
+                with st.status("🕵️ Scanning research frontier...", expanded=True) as ts:
+                    st.write(f"**Field:** `{prompt}`")
+                    papers = search_arxiv(prompt, max_results=8)
+                    ts.update(label=f"✅ Analyzed {len(papers)} frontier papers", state="complete", expanded=False)
+                resp = st.write_stream(research_gap_stream(prompt))
+                messages.append({"role": "assistant", "content": resp, "agent": "GapFinder"})
+                save_message("GapFinder", "assistant", resp, {"agent": "GapFinder"})
+
+            # ---- 📚 Knowledge Base (RAG) ----
+            elif mode == "RAG":
+                if "vector_store" not in st.session_state:
+                    st.info("Click **➕** to upload a document first.")
+                else:
+                    with st.status("📚 Retrieving from knowledge base...", expanded=True) as ts:
+                        st.write(f"**Query:** `{prompt}`")
+                        chunks = get_retrieved_chunks(prompt, st.session_state.vector_store)
+                        ts.update(label=f"✅ Retrieved {len(chunks)} relevant chunks", state="complete", expanded=False)
+                    resp = st.write_stream(ask_stream(prompt, st.session_state.vector_store, messages[:-1]))
+                    with st.expander("📂 Source fragments", expanded=False):
+                        render_chunks(chunks)
+                    messages.append({"role": "assistant", "content": resp, "agent": "RAG",
+                                     "metadata": {"chunks": chunks}})
+                    save_message("RAG", "assistant", resp, {"agent": "RAG", "chunks": chunks})
+
+            # ---- 🎨 Image Generation ----
+            elif mode == "Image":
+                with st.status("🎨 Generating image...", expanded=True) as ts:
+                    st.write(f"**Prompt:** `{prompt}`")
+                    gen_img = generate_image(prompt)
+                    ts.update(label="✅ Image generated", state="complete", expanded=False)
+                st.image(gen_img)
+                msg_ = f"🎨 Generated: *{prompt}*"
+                messages.append({"role": "assistant", "content": msg_,
+                                 "agent": "Image", "image": gen_img})
+                save_message("Image", "assistant", msg_, {"agent": "Image"})
+
+            # ---- 👁️ Vision (follow-up) ----
+            elif mode == "Vision":
+                if st.session_state.attached_image:
+                    from langchain_core.messages import SystemMessage, HumanMessage
                     ctx = st.session_state.attached_image["text"]
-                    vis_msgs = [
+                    llm = get_llm()
+                    with st.status("👁️ Reasoning over image content...", expanded=True) as ts:
+                        st.write(f"**Question:** `{prompt}`")
+                        ts.update(label="✅ Context retrieved", state="complete", expanded=False)
+                    resp = st.write_stream(c.content for c in llm.stream([
                         SystemMessage(content=(
-                            "You are an expert image and document analyst. "
-                            "You have already extracted text/content from the attached image. "
-                            "Answer follow-up questions clearly using only that extracted content.\n\n"
+                            "You are an expert image analyst. Use the extracted image content below "
+                            "to answer follow-up questions clearly and accurately.\n\n"
                             f"Extracted content:\n{ctx}"
                         )),
                         HumanMessage(content=prompt),
-                    ]
-                    response = st.write_stream(
-                        c.content for c in llm.stream(vis_msgs) if c.content
-                    )
-                    messages.append({"role": "assistant", "content": response, "agent": "Vision"})
-                    save_message("Vision", "assistant", response, {"agent": "Vision"})
+                    ]) if c.content)
+                    messages.append({"role": "assistant", "content": resp, "agent": "Vision"})
+                    save_message("Vision", "assistant", resp, {"agent": "Vision"})
                 else:
-                    r = "🖼️ No image attached. Click **➕ Attach** and upload an image first!"
-                    st.info(r)
+                    st.info("Click **➕** to attach an image first.")
 
         except Exception as e:
             err = str(e)
-            if "rate_limit" in err.lower() or "429" in err:
-                st.error("⏳ Rate limit hit. Please wait a moment and try again.")
-            elif "api_key" in err.lower() or "401" in err:
-                st.error("🔑 Invalid API key. Check your `.env` file.")
+            if "429" in err or "rate_limit" in err.lower():
+                st.error("⏳ Rate limit reached — please wait a moment and retry.")
+            elif "401" in err or "api_key" in err.lower():
+                st.error("🔑 Invalid API key. Check `.env`.")
             else:
-                st.error(f"Something went wrong: {err}")
+                st.error(f"Error: {err}")
 
 # ============================================================
 #  FOOTER
 # ============================================================
 st.markdown(
-    '<div class="wolf-footer">🐺 <b>Agent Wolf v2.0</b> — AI Research Copilot<br>'
-    'Powered by <span>Groq Llama 3.3</span> · ArXiv · FAISS · DuckDuckGo<br>'
-    'Deployed by <span>Abdullah Ibne Tayeb Tamur</span></div>',
+    '<div class="gw-footer">'
+    '🐺 Agent Wolf v2.0 &nbsp;·&nbsp; Powered by Groq Llama 3.3, ArXiv, DuckDuckGo, FAISS<br>'
+    'Deployed by <strong>Abdullah Ibne Tayeb Tamur</strong>'
+    '</div>',
     unsafe_allow_html=True,
 )
