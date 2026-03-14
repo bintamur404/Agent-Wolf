@@ -331,7 +331,7 @@ if not st.session_state.gap_messages:
 
 # Persistent FAISS Index
 if "vector_store" not in st.session_state and os.path.exists("database/faiss_index"):
-    from langchain_huggingface import HuggingFaceEmbeddings
+    from langchain_community.embeddings import HuggingFaceEmbeddings
     from langchain_community.vectorstores import FAISS
     try:
         embeddings = HuggingFaceEmbeddings(
