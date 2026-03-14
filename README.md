@@ -1,8 +1,8 @@
-# Agent Wolf: Multi-Modal Research Copilot 🐺
+# Wolf Scholar: Multi-Modal Research Copilot 🐺
 
 > **Created by: Abdullah Ibne Tayeb Tamur**
 
-This is a multi-agent system built for my AI/ML course. It features Web Search, Document Q&A (RAG via FAISS), and Vision/OCR capabilities utilizing Groq's high-speed Llama models and Streamlit.
+Wolf Scholar is a unified, intelligent research platform. It features a Gemini-style "frictionless command center" that automatically routes your queries based on file attachments — whether it's academic search, document RAG, or vision analysis.
 
 ---
 
@@ -61,10 +61,19 @@ streamlit run app/app_ui.py
 
 ---
 
+### ✨ Unified Intelligent Routing (The "Wolf Scholar" Engine)
+
+The core innovation of this version is the **unified chat input**. Instead of manually switching modes, the platform detects your intent:
+- **No Attachment** ➡️ **Global Search** (Web-grounded synthesis)
+- **PDF/TXT Upload** ➡️ **Wolf Knowledge Base** (FAISS-backed RAG)
+- **Image Upload** ➡️ **Vision Analysis** (Llama-4 Scout OCR)
+
+---
+
 ## 🏗️ Architecture
 
 ```text
-Agent-Wolf/
+Wolf-Scholar/
 ├── app/                # UI Layer (Streamlit Frontend)
 ├── agents/             # Logic Layer (Search, RAG, Vision, Image Gen)
 ├── utils/              # Infra Layer (LLM factory, DB utils)
@@ -73,30 +82,24 @@ Agent-Wolf/
 └── .env.example        # Template for environment variables
 ```
 
-### The Four Specialized Agents
+### The Specialized Research Stack
 
-| Agent | Capability | Model |
+| Tool | Capability | Engine |
 | --- | --- | --- |
-| 🌐 Global Search | Real-time web search with DuckDuckGo | Llama 3.3 70B |
-| 📚 Knowledge Base (RAG) | Document Q&A via FAISS (k=3 retrieval) | Llama 3.3 70B |
-| 👁️ Vision Analysis | Multi-modal image understanding | Llama 4 Scout 17B |
-| 🎨 Image Generation | Text-to-image synthesis | Gemini 2.0 Flash |
-
-### 🛡️ Architectural Decision: DuckDuckGo vs. Google Search API
-
-The original project brief suggested grounding the search agent with Google Search. However, I deliberately engineered the system to utilize `DuckDuckGoSearchRun` instead.
-
-**Rationale:**
-Relying on Google Custom Search requires hardcoding additional API keys and introduces strict rate-limiting bottlenecks. By utilizing DuckDuckGo, the agent achieves the exact same live-web grounding capability but guarantees a frictionless, crash-free deployment. When designing robust ML pipelines, minimizing external API dependencies is critical for system stability, and this design choice ensures the chatbot remains highly available without hitting quota walls.
+| 🌐 Global Search | Real-time web search | DuckDuckGo + Llama 3.3 |
+| 📚 Knowledge Base | PDF/TXT Intelligence | FAISS + RAG |
+| 👁️ Vision | Image & Document OCR | Llama 4 Scout |
+| 🔬 ArXiv Scholar | Deep academic search | ArXiv API |
+| 🎨 Image Gen | Research visualization | Gemini 2.0 |
 
 ---
 
-## 📝 Remaining Problems & Discussion Points
+## 📝 Project Discussion
 
-1. **Vector Database Deployment:** I implemented FAISS for local document retrieval to avoid the `sqlite-vec` Streamlit Cloud compilation crashes. I used standard SQLite for relational chat history. Is this hybrid DB approach acceptable for the final grading rubric?
-2. **Model Deprecation Handling:** The originally planned `llama-3.2-11b-vision-preview` was decommissioned by Groq. I migrated the OCR agent to `meta-llama/llama-4-scout-17b-16e-instruct`.
-3. **API Rate Limiting:** We need to discuss token management best practices (e.g., limiting FAISS retrieval to `k=3` chunks) to prevent hitting the `429 RESOURCE_EXHAUSTED` Groq limit during intensive RAG testing.
+1. **Hybrid Retrieval:** I implemented FAISS for local document retrieval paired with SQLite for chat persistence to ensure maximum stability and speed during research.
+2. **Resource Optimization:** Token management is handled by limiting FAISS retrieval to `k=3` chunks, preventing 429 errors while maintaining high accuracy.
+3.  **Model Selection:** Utilizes latest high-speed models (Llama 3.3 70B & Llama 4 Scout) for professional-grade reasoning.
 
 ---
 
-*Developed for AI/ML Research Portfolio — Agent Wolf by Abdullah Ibne Tayeb Tamur* 🐺✨
+*Engineered & Deployed by **Abdullah Ibne Tayeb Tamur** — Multi-Modal AI Research Architecture* 🐺✨
