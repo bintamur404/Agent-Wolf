@@ -1,7 +1,20 @@
 import sqlite3
 import os
 import json
+import numpy as np
 from datetime import datetime
+
+
+class _NumpyEncoder(json.JSONEncoder):
+    """Converts numpy scalar types to native Python types for JSON serialization."""
+    def default(self, obj):
+        if isinstance(obj, np.floating):
+            return float(obj)
+        if isinstance(obj, np.integer):
+            return int(obj)
+        if isinstance(obj, np.ndarray):
+            return obj.tolist()
+        return super().default(obj)
 
 DB_PATH = os.path.join("database", "wolf_history.db")
 
@@ -32,7 +45,10 @@ def save_message(agent, role, content, metadata=None):
     cursor.execute("""
         INSERT INTO chat_history (agent, role, content, metadata)
         VALUES (?, ?, ?, ?)
-    """, (agent, role, content, json.dumps(metadata) if metadata else None))
+    """, (
+        agent, role, content,
+        json.dumps(metadata, cls=_NumpyEncoder) if metadata else None
+    ))
     conn.commit()
     conn.close()
 

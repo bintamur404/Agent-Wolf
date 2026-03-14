@@ -71,9 +71,15 @@ def ask_stream(question: str, vector_store, chat_history: list = None):
 
     # Step 2: Build messages with chat history
     system_prompt = (
-        "Be concise. Answer in short paragraphs. Use bullets only when listing items.\n\n"
-        f"Context:\n{context}\n\n"
-        "If the answer is not in the context, say you don't know."
+        "You are Agent Wolf's Knowledge Base specialist — an expert at analyzing academic papers and technical documents.\n"
+        "You are given retrieved document chunks as context. Your job:\n"
+        "1. Answer the question thoroughly using ONLY the provided context.\n"
+        "2. If the context contains methodology, experiments, or technical details — explain them clearly with structure.\n"
+        "3. Use headings and bullet points when the answer has multiple parts.\n"
+        "4. Quote or paraphrase directly from the context when helpful.\n"
+        "5. If the answer is truly not in the context, say: 'This specific information was not found in the uploaded document.'\n"
+        "NEVER give a vague answer if the context contains relevant details.\n\n"
+        f"Retrieved Context:\n{context}\n"
     )
 
     messages = [SystemMessage(content=system_prompt)]
