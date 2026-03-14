@@ -1,6 +1,6 @@
 import re
 import streamlit as st
-from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
+from langchain_core.messages import SystemMessage, HumanMessage, AIMessage, ToolMessage
 from langchain_community.tools import DuckDuckGoSearchRun
 from utils.llm import get_llm
 
@@ -90,13 +90,13 @@ def search_stream(query: str, chat_history: list = None):
             search_results = search.run(search_query)
             status.update(label="Search complete!", state="complete")
         
-        # Step 3: Feed results back to LLM
+        # Step 3: Feed results back to LLM using ToolMessage (required by Groq)
         if "response" in locals():
             messages.append(response)
         else:
             messages.append(AIMessage(content="", tool_calls=[{"name": "browser_search", "args": {"query": search_query}, "id": tool_call_id}]))
             
-        messages.append(AIMessage(content=f"Search Results:\n{search_results}", tool_call_id=tool_call_id))
+        messages.append(ToolMessage(content=f"Search Results:\n{search_results}", tool_call_id=tool_call_id))
         
         # Step 4: Stream final answer
         try:
