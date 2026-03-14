@@ -15,8 +15,11 @@ class SafeEmbeddings(Embeddings):
     """A stable CPU-only embeddings class that bypasses LangChain's HuggingFace wrappers."""
 
     def __init__(self, model_name: str = "sentence-transformers/all-MiniLM-L6-v2"):
-        # SentenceTransformer's own device management is stable on Windows
-        self._model = SentenceTransformer(model_name, device="cpu")
+        # Explicitly avoid passing device="cpu" in the constructor as it can trigger 
+        # 'Cannot copy out of meta tensor' errors on some Windows environments 
+        # during the internal __init__ call to self.to(device).
+        self._model = SentenceTransformer(model_name)
+        self._model.to("cpu")
 
     def embed_documents(self, texts: List[str]) -> List[List[float]]:
         embeddings = self._model.encode(
