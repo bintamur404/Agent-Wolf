@@ -356,19 +356,7 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# ============================================================
-#  MODE PILL BAR  (horizontal, centered, at top of chat)
-# ============================================================
-pill_cols = st.columns(len(MODES))
-for i, (m_key, emoji, label) in enumerate(MODES):
-    is_active = (st.session_state.active_mode == m_key)
-    with pill_cols[i]:
-        t = "primary" if is_active else "secondary"
-        if st.button(f"{emoji} {label}", key=f"pill_{m_key}", type=t, use_container_width=True):
-            st.session_state.active_mode = m_key
-            st.rerun()
 
-st.divider()
 
 
 # ============================================================
@@ -425,38 +413,56 @@ elif st.session_state.attached_image:
     )
 
 # ============================================================
-#  INPUT ROW:  [➕ Attach popover]  [chat input]
+#  INPUT ROW:  [➕ popover]  [chat input]
 # ============================================================
-input_left, input_right = st.columns([0.08, 0.92])
 
-with input_left:
-    with st.popover("➕", help="Attach a PDF, image, or document"):
-        st.markdown("#### 📎 Attach a file")
-        tab_doc, tab_img = st.tabs(["📄 Document (PDF/TXT)", "🖼️ Image (PNG/JPG)"])
+# Active mode indicator above input
+_am = st.session_state.active_mode
+_emoji = next((e for k, e, _ in MODES if k == _am), "🐺")
+_lbl   = next((l for k, _, l in MODES if k == _am), _am)
 
-        with tab_doc:
-            st.caption("Wolf will read this document and switch to **Knowledge Base** mode.")
-            doc_up = st.file_uploader("Drop PDF or TXT", type=["pdf", "txt"],
-                                      key="pop_doc", label_visibility="collapsed")
-            if doc_up and st.button("✅ Load document", key="load_pop_doc"):
-                with st.spinner(f"Processing {doc_up.name}..."):
-                    try:
-                        st.session_state.vector_store = build_vector_store([doc_up])
-                        st.session_state.attached_pdf   = doc_up.name
-                        st.session_state.attached_image = None
-                        st.session_state.active_mode    = "RAG"
-                        st.success("✅ Done — ask your question below!")
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"Error: {e}")
+col_plus, col_chat = st.columns([0.07, 0.93])
 
-        with tab_img:
-            st.caption("Wolf will analyze this image. Switch to **Vision** mode to ask follow-up questions.")
-            img_up = st.file_uploader("Drop image", type=["png", "jpg", "jpeg"],
-                                      key="pop_img", label_visibility="collapsed")
-            if img_up:
-                st.image(img_up, use_container_width=True)
-            if img_up and st.button("✅ Analyze image", key="analyze_pop_img"):
+with col_plus:
+    with st.popover("➕", help="Switch agent or attach a file"):
+
+        # ── SECTION 1: Agent / Tool selector ──
+        st.markdown("**🔧 Switch Agent**")
+        st.caption("Choose what Wolf should do with your message")
+        for m_key, m_emoji, m_label in MODES:
+            is_active = (st.session_state.active_mode == m_key)
+            label_txt = f"{m_emoji} {m_label}" + (" ✓" if is_active else "")
+            if st.button(label_txt, key=f"pop_mode_{m_key}", use_container_width=True):
+                st.session_state.active_mode = m_key
+                st.rerun()
+
+        st.divider()
+
+        # ── SECTION 2: Attach Document ──
+        st.markdown("**📄 Attach Document** *(PDF / TXT → Knowledge Base)*")
+        doc_up = st.file_uploader("Upload PDF or TXT", type=["pdf", "txt"],
+                                  key="pop_doc", label_visibility="collapsed")
+        if doc_up and st.button("✅ Load document", key="load_pop_doc"):
+            with st.spinner(f"Processing {doc_up.name}..."):
+                try:
+                    st.session_state.vector_store = build_vector_store([doc_up])
+                    st.session_state.attached_pdf   = doc_up.name
+                    st.session_state.attached_image = None
+                    st.session_state.active_mode    = "RAG"
+                    st.success("✅ Done — ask your question below!")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Error: {e}")
+
+        st.divider()
+
+        # ── SECTION 3: Attach Image ──
+        st.markdown("**🖼️ Attach Image** *(PNG / JPG → Vision)*")
+        img_up = st.file_uploader("Upload image", type=["png", "jpg", "jpeg"],
+                                  key="pop_img", label_visibility="collapsed")
+        if img_up:
+            st.image(img_up, use_container_width=True)
+        if img_up and st.button("✅ Analyze image", key="analyze_pop_img"):
                 with st.spinner(f"Analyzing {img_up.name}..."):
                     try:
                         extracted = perform_ocr(img_up.read())
@@ -483,9 +489,9 @@ with input_left:
                 st.rerun()
 
 # ============================================================
-#  CHAT INPUT (right column, full width feel)
+#  CHAT INPUT
 # ============================================================
-with input_right:
+with col_chat:
     mode     = st.session_state.active_mode
     messages = st.session_state[f"msgs_{mode}"]
     prompt   = st.chat_input(HINTS.get(mode, "Ask Wolf anything..."))
