@@ -98,10 +98,10 @@ This project is fully integrated with **LangSmith** for real-time agent telemetr
 To demonstrate the execution of the Wolf Scholar chatbot, workflow tracing has been fully implemented. Below are public, read-only links to specific agent executions showing tool usage and LLM reasoning:
 
 * **Trace 1: RAG Document Analysis (FAISS)**
-  * [Link to Trace](https://smith.langchain.com/public/14f413d7-eaae-4d18-a4cc-baa5e6ae98ad/r)
+  * [Link to Trace](https://smith.langchain.com/public/5d965407-b967-42fe-b7ae-503a5e50de87/r)
   * *Description:* Demonstrates the agent chunking a PDF, embedding it, and retrieving context to answer an academic query.
 * **Trace 2: Academic Web Search (DuckDuckGo)**
-  * [Link to Trace](https://smith.langchain.com/public/14f413d7-eaae-4d18-a4cc-baa5e6ae98ad/r)
+  * [Link to Trace](https://smith.langchain.com/public/fa90a965-c549-4b7b-be52-3a443a1953b5/r)
   * *Description:* Shows the agent deciding to use the DuckDuckGo search tool to pull live academic data.
 * **Trace 3: Vision/OCR Diagnostics**
   * [Link to Trace](https://smith.langchain.com/public/14f413d7-eaae-4d18-a4cc-baa5e6ae98ad/r)
@@ -109,18 +109,6 @@ To demonstrate the execution of the Wolf Scholar chatbot, workflow tracing has b
 
 **Visual Trace Execution:**
 ![LangSmith Trace Tree](assets/langsmith_trace.png)
-
----
-
-## 📺 Project Video Demonstration
-For a full walkthrough of the Wolf Scholar platform, including the intelligent routing engine and multi-modal agent capabilities, please watch the video demo below:
-
-[![Wolf Scholar Demo](https://img.youtube.com/vi/PASTE_YOUR_VIDEO_ID_HERE/0.jpg)](https://www.youtube.com/watch?v=PASTE_YOUR_VIDEO_ID_HERE)
-
-* **Key Highlights:**
-  * Interactive demonstration of Unified Routing.
-  * Real-time RAG and Academic Search synthesis.
-  * Vision/OCR diagnostic breakdown.
 
 ---
 
