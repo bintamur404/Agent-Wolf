@@ -112,6 +112,18 @@ To demonstrate the execution of the Wolf Scholar chatbot, workflow tracing has b
 
 ---
 
+## 📺 Project Video Demonstration
+For a full walkthrough of the Wolf Scholar platform, including the intelligent routing engine and multi-modal agent capabilities, please watch the video demo below:
+
+[![Wolf Scholar Demo](https://img.youtube.com/vi/PASTE_YOUR_VIDEO_ID_HERE/0.jpg)](https://www.youtube.com/watch?v=PASTE_YOUR_VIDEO_ID_HERE)
+
+* **Key Highlights:**
+  * Interactive demonstration of Unified Routing.
+  * Real-time RAG and Academic Search synthesis.
+  * Vision/OCR diagnostic breakdown.
+
+---
+
 ## 📝 Remaining Problems & Discussion Points
 
 1. **Vector Database Deployment:** I implemented FAISS for local document retrieval to avoid the `sqlite-vec` Streamlit Cloud compilation crashes. I used standard SQLite for relational chat history. Is this hybrid DB approach acceptable for the final grading rubric?
