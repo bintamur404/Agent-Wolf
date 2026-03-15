@@ -152,30 +152,45 @@ def _route_search(query: str) -> Generator:
 def _route_image_gen(prompt: str) -> tuple[bytes, str]:
     """
     Call Pollinations.AI flux model. Returns (image_bytes, clean_description).
-    Retries once with a simplified prompt if the server returns a 5xx error.
+    Retries once with a simplified prompt if the server returns a 5xx error,
+    and falls back to other models (turbo, sana) if flux is overwhelmed.
     """
     description = _extract_description(prompt)
     seed = random.randint(1, 999999)
 
-    def _fetch(desc: str) -> bytes:
+    def _fetch(desc: str, model: str = "flux") -> bytes:
         encoded = urllib.parse.quote(desc)
         url = (
             f"https://image.pollinations.ai/prompt/{encoded}"
-            f"?width=1024&height=768&model=flux&nologo=true&seed={seed}"
+            f"?width=1024&height=768&model={model}&nologo=true&seed={seed}"
         )
-        r = _requests.get(url, timeout=90)
+        r = _requests.get(url, timeout=30) # lower timeout to fail fast and retry
         r.raise_for_status()
         return r.content
 
-    try:
-        return _fetch(description), description
-    except _requests.HTTPError as e:
-        if e.response is not None and e.response.status_code >= 500:
-            # Simplify prompt: remove punctuation and limit length for retry
-            simple = re.sub(r"[^\w\s]", " ", description)
-            simple = " ".join(simple.split()[:12])   # max 12 words
-            return _fetch(simple), simple
-        raise
+    models_to_try = ["flux", "turbo", "sana"]
+    first_error = None
+
+    for model in models_to_try:
+        try:
+            return _fetch(description, model=model), description
+        except _requests.RequestException as e:
+            if first_error is None:
+                first_error = e
+
+            # If it's the very first attempt and it failed, try a simplified prompt on the same model
+            if model == "flux":
+                try:
+                    simple = re.sub(r"[^\w\s]", " ", description)
+                    simple = " ".join(simple.split()[:12])
+                    if simple and simple != description:
+                        return _fetch(simple, model=model), simple
+                except _requests.RequestException:
+                    pass
+
+            continue # try next model
+
+    raise first_error # if all models failed, raise the original error
 
 
 # ── Public router ─────────────────────────────────────────────────────────────
