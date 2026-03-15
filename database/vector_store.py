@@ -76,30 +76,48 @@ def init_db() -> None:
     with sqlite3.connect(_DB_PATH) as conn:
         conn.execute("""
             CREATE TABLE IF NOT EXISTS chat_history (
-                id        INTEGER PRIMARY KEY AUTOINCREMENT,
-                role      TEXT NOT NULL,
-                content   TEXT NOT NULL,
-                timestamp TEXT NOT NULL
+                id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id TEXT NOT NULL,
+                role       TEXT NOT NULL,
+                content    TEXT NOT NULL,
+                timestamp  TEXT NOT NULL
             )
         """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_session ON chat_history(session_id)")
         conn.commit()
 
 
-def save_message(role: str, content: str) -> None:
+def save_message(session_id: str, role: str, content: str) -> None:
     with sqlite3.connect(_DB_PATH) as conn:
         conn.execute(
-            "INSERT INTO chat_history (role, content, timestamp) VALUES (?,?,?)",
-            (role, content, datetime.utcnow().isoformat()),
+            "INSERT INTO chat_history (session_id, role, content, timestamp) VALUES (?,?,?,?)",
+            (session_id, role, content, datetime.utcnow().isoformat()),
         )
         conn.commit()
 
 
-def load_history() -> list:
+def load_history(session_id: str) -> list:
     with sqlite3.connect(_DB_PATH) as conn:
         rows = conn.execute(
-            "SELECT role, content FROM chat_history ORDER BY id"
+            "SELECT role, content FROM chat_history WHERE session_id = ? ORDER BY id",
+            (session_id,)
         ).fetchall()
     return [{"role": r[0], "content": r[1]} for r in rows]
+
+
+def get_all_sessions() -> list:
+    """Return a list of unique session_ids with the first User message as a preview."""
+    with sqlite3.connect(_DB_PATH) as conn:
+        # Get first user message for each session to use as title
+        rows = conn.execute("""
+            SELECT session_id, content 
+            FROM chat_history 
+            WHERE role = 'user' 
+            GROUP BY session_id 
+            HAVING id = MIN(id)
+            ORDER BY id DESC
+        """).fetchall()
+    return [{"id": r[0], "title": r[1][:30] + "..." if len(r[1]) > 30 else r[1]} for r in rows]
 
 
 def clear_history() -> None:

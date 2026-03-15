@@ -9,10 +9,17 @@ import sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 import streamlit as st
+import uuid
 from dotenv import load_dotenv
 
 from agents.router import route
-from database.vector_store import init_db, load_history, save_message, clear_history
+from database.vector_store import (
+    init_db, 
+    load_history, 
+    save_message, 
+    clear_history,
+    get_all_sessions
+)
 
 load_dotenv()
 
@@ -23,7 +30,7 @@ st.set_page_config(
     page_title="Wolf Scholar",
     page_icon="🐺",
     layout="wide",
-    initial_sidebar_state="collapsed",
+    initial_sidebar_state="expanded",
 )
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -56,26 +63,44 @@ html, body, [class*="css"], .stApp {
   color: var(--text) !important;
 }
 #MainMenu, footer, .stDeployButton,
-[data-testid="stToolbar"], [data-testid="stDecoration"] {
+[data-testid="stToolbar"] {
   visibility: hidden !important; display: none !important;
 }
 header {
   background: transparent !important;
   z-index: 999990 !important;
+  pointer-events: none !important; /* Let clicks pass through to toggle button */
 }
-/* Ensure the sidebar open button is visible and sleek */
-[data-testid="collapsedControl"] {
-  color: #ECECEC !important;
-  background: #171717 !important;
-  border: 1px solid rgba(255,255,255,0.1) !important;
+/* Ensure the sidebar open button is prominently visible at the top */
+button[kind="header"],
+[data-testid="collapsedControl"],
+[data-testid="stSidebarCollapsedControl"],
+[data-testid="stHeader"] button {
+  color: #00E5FF !important;
+  background: rgba(23, 23, 23, 0.95) !important;
+  border: 1px solid rgba(0, 229, 255, 0.6) !important;
   border-radius: 8px !important;
-  margin: 12px !important;
+  margin: 10px !important;
   z-index: 999999 !important;
-  display: flex !important;
   visibility: visible !important;
+  opacity: 1 !important;
+  display: flex !important;
+  pointer-events: auto !important;
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
 }
-[data-testid="collapsedControl"]:hover {
+button[kind="header"] svg,
+[data-testid="collapsedControl"] svg,
+[data-testid="stSidebarCollapsedControl"] svg {
+  fill: #00E5FF !important;
+  color: #00E5FF !important;
+}
+button[kind="header"]:hover,
+[data-testid="collapsedControl"]:hover,
+[data-testid="stSidebarCollapsedControl"]:hover {
   background: #212121 !important;
+  border-color: #00E5FF !important;
 }
 
 /* ── Scrollbar ── */
@@ -135,7 +160,9 @@ header {
   backdrop-filter: blur(20px);
   border-bottom: 1px solid var(--border);
   margin-bottom: 1.4rem;
-  position: sticky; top: 0; z-index: 50;
+  margin-top: 60px; /* Increased offset to avoid covering native slide menu button */
+  position: relative; z-index: 50; /* Changed from sticky to relative to avoid hit-box issues */
+  border-radius: 12px;
   animation: fadeSlideUp .5s ease;
 }
 .ws-logo { display:flex; align-items:center; gap:12px; }
@@ -304,15 +331,16 @@ defaults = {
     "vector_store": None,
     "upload_key":   0,      # bumped by New Chat to force file-uploader reset
     "history_loaded": False,
+    "session_id": str(uuid.uuid4()),
 }
 for k, v in defaults.items():
     if k not in st.session_state:
         st.session_state[k] = v
 
-# Load SQLite history once per session
+# Load SQLite history for the current session
 if not st.session_state.history_loaded:
     try:
-        st.session_state.messages = load_history()
+        st.session_state.messages = load_history(st.session_state.session_id)
     except Exception:
         pass
     st.session_state.history_loaded = True
@@ -324,6 +352,7 @@ if not st.session_state.history_loaded:
 with st.sidebar:
     # ── Chat Controls (Top) ───────────────────────────────────────────────────
     if st.button("📝 New chat", use_container_width=True):
+        st.session_state.session_id = str(uuid.uuid4())
         st.session_state.messages     = []
         st.session_state.vector_store = None
         st.session_state.history_loaded = True
@@ -338,17 +367,20 @@ with st.sidebar:
         clear_history()
         st.rerun()
 
-    st.markdown("<br><br>", unsafe_allow_html=True)
-    st.markdown("<div style='font-size:.7rem;color:#737373;margin-bottom:8px;padding-left:8px;'>Wolf Scholar Apps</div>",
-                unsafe_allow_html=True)
-
-    st.markdown("<br><br>", unsafe_allow_html=True)
-    if st.session_state.vector_store:
-        st.markdown("<div style='padding-left:8px;'><span style='color:#00FF87;font-size:.8rem;'>●</span> <span style='font-size:.8rem;color:#A0A0A0;'>Knowledge connected</span></div>", unsafe_allow_html=True)
-    else:
-        st.markdown("<div style='padding-left:8px;font-size:.8rem;color:#737373;'>No document loaded</div>", unsafe_allow_html=True)
-
     st.markdown("<br><hr style='border-color:rgba(255,255,255,0.05);'><br>", unsafe_allow_html=True)
+    st.markdown("<div style='font-size:.7rem;color:#737373;margin-bottom:8px;padding-left:8px;'>Recent Chats</div>",
+                unsafe_allow_html=True)
+    
+    past_sessions = get_all_sessions()
+    for sess in past_sessions:
+        if st.button(f"💬 {sess['title']}", key=f"sess_{sess['id']}", use_container_width=True):
+            st.session_state.session_id = sess['id']
+            st.session_state.messages = load_history(sess['id'])
+            st.session_state.vector_store = None # Vector store is session-file specific
+            st.session_state.history_loaded = True
+            st.rerun()
+
+    st.markdown("<br><br>", unsafe_allow_html=True)
     st.markdown("""
     <div style='font-size:.62rem;color:#3A3A5A;text-align:left;padding-left:8px;'>
       Engineered by<br>
@@ -393,7 +425,6 @@ if not st.session_state.messages:
         ("📄", "Literature Review",  "Upload PDF · FAISS retrieval · Research gaps",            col1),
         ("🔬", "Diagnostic Vision",  "Upload image · Pathology · Precision agriculture",         col2),
         ("🔍", "Live Research",      "arXiv · Nature · IEEE · Real-time academic synthesis",     col1),
-        ("🎨", "Image Generation",   'Say "generate…" · Hugging Face · FLUX model',              col2),
     ]:
         with col:
             st.markdown(f"""
@@ -480,7 +511,7 @@ if user_input:
 
     # ── 1. User bubble ────────────────────────────────────────────────────────
     st.session_state.messages.append({"role": "user", "content": user_input})
-    save_message("user", user_input)
+    save_message(st.session_state.session_id, "user", user_input)
     with st.chat_message("user"):
         st.markdown(user_input)
 
@@ -569,7 +600,7 @@ if user_input:
         record["caption"]  = f"Prompt: {img_prompt}"
 
     st.session_state.messages.append(record)
-    save_message("assistant",
+    save_message(st.session_state.session_id, "assistant",
                  full_response if not is_img else "[Generated Image]")
 
 
