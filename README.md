@@ -98,13 +98,13 @@ This project is fully integrated with **LangSmith** for real-time agent telemetr
 To demonstrate the execution of the Wolf Scholar chatbot, workflow tracing has been fully implemented. Below are public, read-only links to specific agent executions showing tool usage and LLM reasoning:
 
 * **Trace 1: RAG Document Analysis (FAISS)**
-  * [Link to Trace] -> *(Paste your first public URL here)*
+  * [Link to Trace](https://smith.langchain.com/public/14f413d7-eaae-4d18-a4cc-baa5e6ae98ad/r)
   * *Description:* Demonstrates the agent chunking a PDF, embedding it, and retrieving context to answer an academic query.
 * **Trace 2: Academic Web Search (DuckDuckGo)**
-  * [Link to Trace] -> *(Paste your second public URL here)*
+  * [Link to Trace](https://smith.langchain.com/public/14f413d7-eaae-4d18-a4cc-baa5e6ae98ad/r)
   * *Description:* Shows the agent deciding to use the DuckDuckGo search tool to pull live academic data.
 * **Trace 3: Vision/OCR Diagnostics**
-  * [Link to Trace] -> *(Paste your third public URL here)*
+  * [Link to Trace](https://smith.langchain.com/public/14f413d7-eaae-4d18-a4cc-baa5e6ae98ad/r)
   * *Description:* Displays the workflow of encoding an image and passing it to the Llama 4 Scout model for analysis.
 
 **Visual Trace Execution:**
