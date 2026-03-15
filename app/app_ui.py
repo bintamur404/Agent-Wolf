@@ -55,11 +55,20 @@ html, body, [class*="css"], .stApp {
   background: var(--bg) !important;
   color: var(--text) !important;
 }
-#MainMenu, header, footer, .stDeployButton,
+#MainMenu, footer, .stDeployButton,
 [data-testid="stToolbar"], [data-testid="stDecoration"] {
   visibility: hidden !important; display: none !important;
 }
-[data-testid="stHeader"] { height: 0 !important; }
+header {
+  background: transparent !important;
+}
+/* Ensure the sidebar open button is visible and sleek */
+[data-testid="collapsedControl"] {
+  color: var(--muted) !important;
+  background: var(--bg) !important;
+  border-radius: 8px !important;
+  margin: 8px !important;
+}
 
 /* ── Scrollbar ── */
 ::-webkit-scrollbar { width: 4px; }
