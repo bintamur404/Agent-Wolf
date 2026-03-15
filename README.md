@@ -1,5 +1,5 @@
-# Agent Wolf: Multi-Modal Research Copilot 🐺
-This is a multi-agent system built for my AI/ML course. It features Web Search, Document Q&A (RAG via FAISS), and Vision/OCR capabilities utilizing Groq's high-speed Llama models and Streamlit.
+# Wolf Scholar: Multi-Modal Research Copilot 🐺
+This is a multi-agent system built for my AI/ML course. It features Web Search, Document Q&A (RAG via FAISS), and Vision/OCR capabilities utilizing Wolf Scholar's high-speed Llama models and Streamlit.
 
 🚀 How to Run the Project Locally
 1. Create and Activate the Virtual Environment
@@ -29,7 +29,7 @@ For security, API keys are not included in this repository. You must create a .e
 - **LANGCHAIN_TRACING_V2=true**: To enable LangSmith telemetry.
 - **LANGCHAIN_ENDPOINT="https://api.smith.langchain.com"**
 - **LANGCHAIN_API_KEY**: Your LangSmith API key.
-- **LANGCHAIN_PROJECT="Agent_Wolf"**
+- **LANGCHAIN_PROJECT="Wolf_Scholar"**
 
 4. Run the Application
 ```bash
