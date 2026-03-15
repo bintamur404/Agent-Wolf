@@ -147,50 +147,27 @@ def _route_search(query: str) -> Generator:
     return (chunk.content for chunk in llm.stream(msgs) if chunk.content)
 
 
-# ── Route D — Image Generation (Pollinations.AI) ──────────────────────────────
+# ── Route D — Image Generation (Hugging Face) ─────────────────────────────────
 
 def _route_image_gen(prompt: str) -> tuple[bytes, str]:
     """
-    Call Pollinations.AI flux model. Returns (image_bytes, clean_description).
-    Retries once with a simplified prompt if the server returns a 5xx error,
-    and falls back to other models (turbo, sana) if flux is overwhelmed.
+    Call Hugging Face FLUX.1-schnell model. Returns (image_bytes, clean_description).
     """
     description = _extract_description(prompt)
-    seed = random.randint(1, 999999)
+    token = os.getenv("HF_TOKEN")
+    
+    if not token:
+        raise ValueError("HF_TOKEN is missing from your .env file.")
 
-    def _fetch(desc: str, model: str = "flux") -> bytes:
-        encoded = urllib.parse.quote(desc)
-        url = (
-            f"https://image.pollinations.ai/prompt/{encoded}"
-            f"?width=1024&height=768&model={model}&nologo=true&seed={seed}"
-        )
-        r = _requests.get(url, timeout=30) # lower timeout to fail fast and retry
-        r.raise_for_status()
-        return r.content
+    url = "https://router.huggingface.co/hf-inference/models/black-forest-labs/FLUX.1-schnell"
+    headers = {"Authorization": f"Bearer {token}"}
+    payload = {"inputs": description}
 
-    models_to_try = ["flux", "turbo", "sana"]
-    first_error = None
-
-    for model in models_to_try:
-        try:
-            return _fetch(description, model=model), description
-        except _requests.RequestException as e:
-            if first_error is None:
-                first_error = e
-
-            # If it's the very first attempt and it failed, try a simplified prompt on the same model
-            if model == "flux":
-                try:
-                    simple = re.sub(r"[^\w\s]", " ", description)
-                    simple = " ".join(simple.split()[:12])
-                    if simple and simple != description:
-                        return _fetch(simple, model=model), simple
-                except _requests.RequestException:
-                    pass
-
-            continue # try next model
-
-    raise first_error # if all models failed, raise the original error
+    r = _requests.post(url, headers=headers, json=payload, timeout=60)
+    if r.status_code != 200:
+        raise ValueError(f"Hugging Face API Error {r.status_code}: {r.text[:200]}")
+        
+    return r.content, description
 
 
 # ── Public router ─────────────────────────────────────────────────────────────
@@ -242,7 +219,7 @@ def route(
         return {
             "type":    "image",
             "content": img_bytes,
-            "label":   "🎨 Image Gen · Pollinations flux",
+            "label":   "🎨 Image Gen · Hugging Face FLUX",
             "prompt":  clean_prompt,
         }
 

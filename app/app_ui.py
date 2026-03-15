@@ -309,7 +309,7 @@ with st.sidebar:
         ("📄", "RAG · Literature",  "#00E5FF", "PDF → FAISS"),
         ("🔬", "Vision · Pathology","#9D6FFF",  "Image → Llama-4"),
         ("🔍", "Search · Academic", "#FFB830",  "arXiv · IEEE"),
-        ("🎨", "Image Generation",  "#00FF87",  "Pollinations flux"),
+        ("🎨", "Image Generation",  "#00FF87",  "Hugging Face FLUX"),
     ]:
         st.markdown(f"""
         <div class="sb-agent">
@@ -385,7 +385,7 @@ if not st.session_state.messages:
         ("📄", "Literature Review",  "Upload PDF · FAISS retrieval · Research gaps",            col1),
         ("🔬", "Diagnostic Vision",  "Upload image · Pathology · Precision agriculture",         col2),
         ("🔍", "Live Research",      "arXiv · Nature · IEEE · Real-time academic synthesis",     col1),
-        ("🎨", "Image Generation",   'Say "generate…" · Pollinations AI · flux model',           col2),
+        ("🎨", "Image Generation",   'Say "generate…" · Hugging Face · FLUX model',              col2),
     ]:
         with col:
             st.markdown(f"""
@@ -497,7 +497,7 @@ if user_input:
 
                 # ──────── process each route ──────────────────────────────────
                 if rtype == "image":
-                    status.write("🎨 Calling Pollinations AI flux model...")
+                    status.write("🎨 Calling Hugging Face FLUX model...")
                     img_bytes_out = result["content"]
                     img_prompt    = result.get("prompt", user_input)
                     full_response = f"[Image] Prompt: {img_prompt}"
@@ -531,7 +531,7 @@ if user_input:
 
         # ── Display result (outside status, still inside assistant bubble) ────
         if is_img and img_bytes_out:
-            st.image(img_bytes_out, caption="Pollinations AI · flux model")
+            st.image(img_bytes_out, caption="Hugging Face · FLUX.1-schnell")
             st.caption(f"Prompt: {img_prompt}")
         elif full_response:
             st.markdown(full_response)
@@ -574,7 +574,7 @@ st.markdown("""
             padding:1.2rem 0 7rem;margin-top:2rem;
             font-family:JetBrains Mono,monospace;'>
   🐺 Wolf Scholar v2 &nbsp;·&nbsp; Groq Llama 3.3 70B &nbsp;·&nbsp;
-  Llama-4 Scout &nbsp;·&nbsp; FAISS &nbsp;·&nbsp; Pollinations flux &nbsp;·&nbsp; LangSmith<br>
+  Llama-4 Scout &nbsp;·&nbsp; FAISS &nbsp;·&nbsp; Hugging Face FLUX &nbsp;·&nbsp; LangSmith<br>
   <span style='color:rgba(0,229,255,.2);'>
     Precision Intelligence for Academic &amp; Diagnostic Research
     &nbsp;·&nbsp; Engineered by Abdullah Ibne Tayeb Tamur
