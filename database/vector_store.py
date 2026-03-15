@@ -1,7 +1,13 @@
 """
 database/vector_store.py
-PDF ingestion pipeline: load → chunk → embed → FAISS → retrieve.
-Also owns all SQLite chat history persistence.
+PDF ingestion (FAISS) + SQLite chat history.
+
+All public functions:
+  build_vector_store(pdf_path)      → FAISS
+  retrieve_context(vs, query, k=3) → str
+  init_db()
+  save_message(role, content)
+  load_history()                    → list[dict]
 """
 import os
 import sqlite3
@@ -9,8 +15,8 @@ from datetime import datetime
 from typing import List
 
 from dotenv import load_dotenv
-from langchain_community.document_loaders import PyPDFLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_community.document_loaders import PyPDFLoader
 from langchain_community.vectorstores import FAISS
 from langchain_core.embeddings import Embeddings
 from sentence_transformers import SentenceTransformer
@@ -18,8 +24,7 @@ from sentence_transformers import SentenceTransformer
 load_dotenv()
 
 
-# ── Stable CPU embeddings ─────────────────────────────────────────────────────
-# Avoids the HuggingFaceEmbeddings meta-tensor crash on Windows
+# ── Safe CPU embeddings (avoids meta-tensor crash on Windows) ─────────────────
 class _SafeEmbeddings(Embeddings):
     def __init__(self, model_name: str = "sentence-transformers/all-MiniLM-L6-v2"):
         self._model = SentenceTransformer(model_name)
@@ -36,7 +41,7 @@ class _SafeEmbeddings(Embeddings):
         ).tolist()
 
 
-_EMBEDDINGS = None  # lazy singleton per process
+_EMBEDDINGS: _SafeEmbeddings | None = None  # lazy singleton
 
 
 def _get_embeddings() -> _SafeEmbeddings:
@@ -49,29 +54,25 @@ def _get_embeddings() -> _SafeEmbeddings:
 # ── FAISS ─────────────────────────────────────────────────────────────────────
 
 def build_vector_store(pdf_path: str) -> FAISS:
-    """
-    Ingest a PDF into an in-memory FAISS index.
-    Rebuilt fresh for every PDF upload.
-    """
+    """Load a PDF from disk, chunk it, embed, return FAISS index."""
     loader = PyPDFLoader(pdf_path)
-    documents = loader.load()
+    docs = loader.load()
     splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=150)
-    chunks = splitter.split_documents(documents)
+    chunks = splitter.split_documents(docs)
     return FAISS.from_documents(chunks, _get_embeddings())
 
 
 def retrieve_context(vector_store: FAISS, query: str, k: int = 3) -> str:
-    """Return top-k similar chunks joined as a single context string."""
+    """Return top-k relevant chunks joined as a single string."""
     docs = vector_store.similarity_search(query, k=k)
-    return "\n\n---\n\n".join(doc.page_content for doc in docs)
+    return "\n\n---\n\n".join(d.page_content for d in docs)
 
 
-# ── SQLite chat history ───────────────────────────────────────────────────────
+# ── SQLite ────────────────────────────────────────────────────────────────────
 _DB_PATH = os.path.join(os.path.dirname(__file__), "..", "wolf_scholar.db")
 
 
 def init_db() -> None:
-    """Create chat_history table if it doesn't already exist."""
     with sqlite3.connect(_DB_PATH) as conn:
         conn.execute("""
             CREATE TABLE IF NOT EXISTS chat_history (
@@ -85,17 +86,15 @@ def init_db() -> None:
 
 
 def save_message(role: str, content: str) -> None:
-    """Persist one chat turn to SQLite."""
     with sqlite3.connect(_DB_PATH) as conn:
         conn.execute(
-            "INSERT INTO chat_history (role, content, timestamp) VALUES (?, ?, ?)",
+            "INSERT INTO chat_history (role, content, timestamp) VALUES (?,?,?)",
             (role, content, datetime.utcnow().isoformat()),
         )
         conn.commit()
 
 
 def load_history() -> list:
-    """Return all persisted chat turns ordered by insertion."""
     with sqlite3.connect(_DB_PATH) as conn:
         rows = conn.execute(
             "SELECT role, content FROM chat_history ORDER BY id"

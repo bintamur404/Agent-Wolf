@@ -1,11 +1,20 @@
 """
 agents/router.py
-Four-route intelligence brain for Wolf Scholar.
+Wolf Scholar — four-route intelligence brain.
 
-A — PDF uploaded        → RAG Agent (FAISS + Groq)
-B — Image uploaded      → Vision Agent (Groq Llama-4 Scout)
-C — No file, text query → Academic Search (DuckDuckGo → arXiv/Nature/IEEE)
-D — No file, image kw   → Image Generation (Pollinations.AI, free, no key)
+ROUTE A  PDF upload  → RAG via FAISS + Llama 3.3 70B  (streaming)
+ROUTE B  Image upload → Vision via Llama-4 Scout       (full string)
+ROUTE C  Text only    → Academic search DuckDuckGo     (streaming)
+ROUTE D  Text + image keyword → Pollinations.AI image gen (bytes)
+
+Public API:
+    route(user_input, uploaded_file=None, vs_ref=None) → dict
+    {
+        "type":    "rag" | "vision" | "search" | "image",
+        "content": generator | str | bytes,
+        "label":   str,
+        "prompt":  str   (only for type=="image")
+    }
 """
 import base64
 import os
@@ -25,15 +34,15 @@ from utils.llm_factory import get_text_llm, get_vision_llm
 
 load_dotenv()
 
-# ── Image-generation trigger keywords ────────────────────────────────────────
-IMAGE_TRIGGERS = [
-    "generate", "create image", "draw", "visualize",
-    "illustrate", "make an image", "show me a picture",
-    "render", "depict", "paint", "sketch", "design an image",
+# ── Image-generation trigger keywords ─────────────────────────────────────────
+_IMAGE_TRIGGERS = [
+    "generate", "create image", "create an image", "draw",
+    "visualize", "illustrate", "make an image", "make a picture",
+    "show me a picture", "render", "depict", "paint", "sketch",
+    "design an image", "generate an image", "generate a picture",
 ]
 
-
-# ── System Prompts ────────────────────────────────────────────────────────────
+# ── System prompts (verbatim per spec) ────────────────────────────────────────
 _RAG_SYSTEM = (
     "You are Wolf Scholar, a senior academic researcher specializing in deep learning "
     "architectures (dual-stream networks, FreqViT, ViT-based models) and computational "
@@ -44,34 +53,35 @@ _RAG_SYSTEM = (
 )
 
 _VISION_SYSTEM = (
-    "You are Wolf Scholar's diagnostic vision module, acting as a board-certified pathologist "
-    "and precision agriculture specialist. Examine the attached image meticulously. Identify: "
-    "(1) visible anomalies, lesions, or disease markers, "
+    "You are Wolf Scholar's diagnostic vision module, acting as a board-certified "
+    "pathologist and precision agriculture specialist. Examine the attached image "
+    "meticulously. Identify: (1) visible anomalies, lesions, or disease markers, "
     "(2) affected tissue/crop regions with approximate severity, "
     "(3) likely differential diagnoses ranked by confidence, "
     "(4) recommended next diagnostic steps. Be precise, clinical, and evidence-based."
 )
 
 _SEARCH_SYSTEM = (
-    "You are Wolf Scholar, an academic research assistant. You have been given live search "
-    "results from arXiv, Nature, and IEEE. Synthesize these results into a coherent, "
-    "well-cited academic summary. Always mention paper titles, authors if available, and "
-    "publication venues. Highlight consensus findings and areas of active debate."
+    "You are Wolf Scholar, an academic research assistant. You have been given live "
+    "search results from arXiv, Nature, and IEEE. Synthesize these results into a "
+    "coherent, well-cited academic summary. Always mention paper titles, authors if "
+    "available, and publication venues. Highlight consensus findings and active debates."
 )
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
 def _is_image_request(text: str) -> bool:
     t = text.lower()
-    return any(kw in t for kw in IMAGE_TRIGGERS)
+    return any(kw in t for kw in _IMAGE_TRIGGERS)
 
 
-def _extract_image_description(prompt: str) -> str:
-    """Strip leading generate/create/draw verbs to get the core description."""
+def _extract_description(prompt: str) -> str:
+    """Strip verb prefix ('generate a ...') to get the core image description."""
     clean = re.sub(
-        r"^(please\s+)?(generate|create|draw|visualize|illustrate|"
-        r"make an image of|show me a picture of|render|depict|paint|sketch|"
-        r"design an image of|make|create an image of)\s+",
+        r"^(please\s+)?(generate an?|create an? image of?|create an?|draw|"
+        r"visualize|illustrate|make an? image of?|make an?|show me a picture of?|"
+        r"render|depict|paint|sketch|design an? image of?|generate)\s+",
         "",
         prompt.strip(),
         flags=re.IGNORECASE,
@@ -79,8 +89,10 @@ def _extract_image_description(prompt: str) -> str:
     return clean or prompt
 
 
-# ── Route A — RAG ─────────────────────────────────────────────────────────────
-def _route_pdf(query: str, pdf_bytes: bytes, vs_ref: list) -> Generator:
+# ── Route A — PDF / RAG ───────────────────────────────────────────────────────
+
+def _route_rag(query: str, pdf_bytes: bytes, vs_ref: list) -> Generator:
+    """Save PDF to tmp, build FAISS, retrieve context, stream LLM."""
     with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
         tmp.write(pdf_bytes)
         tmp_path = tmp.name
@@ -94,19 +106,24 @@ def _route_pdf(query: str, pdf_bytes: bytes, vs_ref: list) -> Generator:
     llm = get_text_llm()
     msgs = [
         SystemMessage(content=_RAG_SYSTEM),
-        HumanMessage(content=f"Research Context:\n{context}\n\nUser Question:\n{query}"),
+        HumanMessage(
+            content=f"Research Context:\n{context}\n\nUser Question:\n{query}"
+        ),
     ]
     return (chunk.content for chunk in llm.stream(msgs) if chunk.content)
 
 
-# ── Route B — Vision ──────────────────────────────────────────────────────────
-def _route_vision(query: str, image_bytes: bytes, mime: str) -> str:
-    b64 = base64.b64encode(image_bytes).decode()
+# ── Route B — Image / Vision ──────────────────────────────────────────────────
+
+def _route_vision(query: str, img_bytes: bytes, mime: str) -> str:
+    """Base64-encode image, call vision LLM, return full response string."""
+    b64 = base64.b64encode(img_bytes).decode()
     llm = get_vision_llm()
     msgs = [
         SystemMessage(content=_VISION_SYSTEM),
         HumanMessage(content=[
-            {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{b64}"}},
+            {"type": "image_url",
+             "image_url": {"url": f"data:{mime};base64,{b64}"}},
             {"type": "text", "text": query},
         ]),
     ]
@@ -114,40 +131,65 @@ def _route_vision(query: str, image_bytes: bytes, mime: str) -> str:
 
 
 # ── Route C — Academic Search ─────────────────────────────────────────────────
+
 def _route_search(query: str) -> Generator:
-    academic_query = f"{query} site:arxiv.org OR site:nature.com OR site:ieee.org"
+    """DuckDuckGo → academic sites → stream LLM synthesis."""
+    academic_q = f"{query} site:arxiv.org OR site:nature.com OR site:ieee.org"
     ddg = DuckDuckGoSearchRun()
-    results = ddg.run(academic_query)
+    results = ddg.run(academic_q)
     llm = get_text_llm()
     msgs = [
         SystemMessage(content=_SEARCH_SYSTEM),
-        HumanMessage(content=f"Search Results:\n{results}\n\nUser Query:\n{query}"),
+        HumanMessage(
+            content=f"Search Results:\n{results}\n\nUser Query:\n{query}"
+        ),
     ]
     return (chunk.content for chunk in llm.stream(msgs) if chunk.content)
 
 
 # ── Route D — Image Generation (Pollinations.AI) ──────────────────────────────
-def _route_image_gen(prompt: str) -> bytes:
-    description = _extract_image_description(prompt)
-    encoded = urllib.parse.quote(description)
-    seed = random.randint(1, 99999)
-    url = (
-        f"https://image.pollinations.ai/prompt/{encoded}"
-        f"?width=1024&height=768&model=flux&nologo=true&seed={seed}"
-    )
-    resp = _requests.get(url, timeout=90)
-    resp.raise_for_status()
-    return resp.content, description
+
+def _route_image_gen(prompt: str) -> tuple[bytes, str]:
+    """
+    Call Pollinations.AI flux model. Returns (image_bytes, clean_description).
+    Retries once with a simplified prompt if the server returns a 5xx error.
+    """
+    description = _extract_description(prompt)
+    seed = random.randint(1, 999999)
+
+    def _fetch(desc: str) -> bytes:
+        encoded = urllib.parse.quote(desc)
+        url = (
+            f"https://image.pollinations.ai/prompt/{encoded}"
+            f"?width=1024&height=768&model=flux&nologo=true&seed={seed}"
+        )
+        r = _requests.get(url, timeout=90)
+        r.raise_for_status()
+        return r.content
+
+    try:
+        return _fetch(description), description
+    except _requests.HTTPError as e:
+        if e.response is not None and e.response.status_code >= 500:
+            # Simplify prompt: remove punctuation and limit length for retry
+            simple = re.sub(r"[^\w\s]", " ", description)
+            simple = " ".join(simple.split()[:12])   # max 12 words
+            return _fetch(simple), simple
+        raise
 
 
 # ── Public router ─────────────────────────────────────────────────────────────
-def route(user_input: str, uploaded_file=None, vs_ref: list = None) -> dict:
+
+def route(
+    user_input: str,
+    uploaded_file=None,
+    vs_ref: list | None = None,
+) -> dict:
     """
     Route the user turn to the correct agent.
 
-    Returns a dict:
-      {"type": "rag|vision|search|image", "content": generator_or_bytes,
-       "label": str, "prompt": str (image only)}
+    Returns:
+        dict with keys: type, content, label, prompt (image only)
     """
     if vs_ref is None:
         vs_ref = [None]
@@ -155,12 +197,18 @@ def route(user_input: str, uploaded_file=None, vs_ref: list = None) -> dict:
     # ── File attached ──────────────────────────────────────────────────────────
     if uploaded_file is not None:
         mime = uploaded_file.type
+        # Read bytes once; caller must have sought to 0 if file was previewed
         raw = uploaded_file.read()
+        if not raw:
+            raise ValueError(
+                "File appears empty. If you previewed it above, this is a "
+                "Streamlit seek bug — please refresh and try again."
+            )
 
         if mime == "application/pdf":
             return {
                 "type":    "rag",
-                "content": _route_pdf(user_input, raw, vs_ref),
+                "content": _route_rag(user_input, raw, vs_ref),
                 "label":   "📄 RAG · FAISS Knowledge Base",
             }
 
@@ -173,7 +221,7 @@ def route(user_input: str, uploaded_file=None, vs_ref: list = None) -> dict:
 
         raise ValueError(f"Unsupported file type: {mime}")
 
-    # ── No file — check for image-gen keywords ─────────────────────────────────
+    # ── No file — image generation keyword? ───────────────────────────────────
     if _is_image_request(user_input):
         img_bytes, clean_prompt = _route_image_gen(user_input)
         return {
@@ -183,7 +231,7 @@ def route(user_input: str, uploaded_file=None, vs_ref: list = None) -> dict:
             "prompt":  clean_prompt,
         }
 
-    # ── Default: academic search ───────────────────────────────────────────────
+    # ── Default: academic web search ──────────────────────────────────────────
     return {
         "type":    "search",
         "content": _route_search(user_input),

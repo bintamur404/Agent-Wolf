@@ -9,4 +9,5 @@ pypdf>=4.2.0
 python-dotenv>=1.0.0
 duckduckgo-search>=6.1.0
 pillow>=10.3.0
+requests>=2.31.0
 arxiv>=2.1.0
