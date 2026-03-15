@@ -61,13 +61,21 @@ html, body, [class*="css"], .stApp {
 }
 header {
   background: transparent !important;
+  z-index: 999990 !important;
 }
 /* Ensure the sidebar open button is visible and sleek */
 [data-testid="collapsedControl"] {
-  color: var(--muted) !important;
-  background: var(--bg) !important;
+  color: #ECECEC !important;
+  background: #171717 !important;
+  border: 1px solid rgba(255,255,255,0.1) !important;
   border-radius: 8px !important;
-  margin: 8px !important;
+  margin: 12px !important;
+  z-index: 999999 !important;
+  display: flex !important;
+  visibility: visible !important;
+}
+[data-testid="collapsedControl"]:hover {
+  background: #212121 !important;
 }
 
 /* ── Scrollbar ── */
