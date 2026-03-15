@@ -229,17 +229,31 @@ html, body, [class*="css"], .stApp {
 
 /* ── Sidebar ── */
 section[data-testid="stSidebar"] {
-  background:rgba(8,11,18,.85) !important;
-  backdrop-filter:blur(12px) !important;
-  border-right:1px solid var(--border) !important;
+  background: #171717 !important; /* ChatGPT dark gray */
+  border-right: none !important;
+}
+section[data-testid="stSidebar"] .stButton > button {
+  background: transparent !important;
+  border: none !important;
+  justify-content: flex-start !important;
+  text-align: left !important;
+  color: #ECECEC !important;
+  font-size: .95rem !important;
+  padding: .6rem .8rem !important;
+  border-radius: 8px !important;
+  font-family: 'JetBrains Mono', monospace !important;
+}
+section[data-testid="stSidebar"] .stButton > button:hover {
+  background: #212121 !important;
+  box-shadow: none !important;
 }
 .sb-agent {
-  display:flex; align-items:center; gap:10px; padding:8px 10px;
-  border-radius:8px; margin-bottom:6px; font-size:.78rem; color:var(--muted);
-  border:1px solid transparent; transition:all .15s;
+  display:flex; align-items:center; gap:10px; padding:6px 8px;
+  border-radius:8px; margin-bottom:4px; font-size:.8rem; color:#A0A0A0;
+  transition:all .15s;
 }
-.sb-agent:hover { background:var(--surface); border-color:var(--border); color:var(--text); }
-.sb-icon { width:28px;height:28px;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:13px; }
+.sb-agent:hover { background:#212121; color:#ECECEC; }
+.sb-icon { width:24px;height:24px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:12px; }
 
 /* ── Misc ── */
 hr { border-color:var(--border) !important; margin:.6rem 0 !important; }
@@ -291,46 +305,37 @@ if not st.session_state.history_loaded:
 #  SIDEBAR
 # ════════════════════════════════════════════════════════════════════════════
 with st.sidebar:
-    st.markdown("""
-    <div style='padding:1rem 0 .5rem;text-align:center;'>
-      <div style='font-family:Syne,sans-serif;font-size:1.1rem;font-weight:800;
-                  background:linear-gradient(90deg,#00E5FF,#9D6FFF);
-                  -webkit-background-clip:text;-webkit-text-fill-color:transparent;'>
-        🐺 Wolf Scholar
-      </div>
-      <div style='font-size:.62rem;color:#64748B;letter-spacing:1px;margin-top:2px;'>Intelligence Terminal</div>
-    </div>""", unsafe_allow_html=True)
+    # ── Chat Controls (Top) ───────────────────────────────────────────────────
+    if st.button("📝 New chat", use_container_width=True):
+        st.session_state.messages     = []
+        st.session_state.vector_store = None
+        st.session_state.history_loaded = True
+        st.session_state.upload_key  += 1
+        st.rerun()
 
-    st.divider()
-    st.markdown("<div style='font-size:.65rem;color:#64748B;letter-spacing:1px;text-transform:uppercase;margin-bottom:8px;'>Agents Online</div>",
+    if st.button("🗑️ Clear chats", use_container_width=True):
+        st.session_state.messages     = []
+        st.session_state.vector_store = None
+        st.session_state.history_loaded = True
+        st.session_state.upload_key  += 1
+        clear_history()
+        st.rerun()
+
+    st.markdown("<br><br>", unsafe_allow_html=True)
+    st.markdown("<div style='font-size:.7rem;color:#737373;margin-bottom:8px;padding-left:8px;'>Wolf Scholar Apps</div>",
                 unsafe_allow_html=True)
 
-    for icon, lbl, color, sub in [
-        ("📄", "RAG · Literature",  "#00E5FF", "PDF → FAISS"),
-        ("🔬", "Vision · Pathology","#9D6FFF",  "Image → Llama-4"),
-        ("🔍", "Search · Academic", "#FFB830",  "arXiv · IEEE"),
-        ("🎨", "Image Generation",  "#00FF87",  "Hugging Face FLUX"),
-    ]:
-        st.markdown(f"""
-        <div class="sb-agent">
-          <div class="sb-icon" style="background:rgba(0,0,0,.3);border:1px solid {color}33;">{icon}</div>
-          <div>
-            <div style="color:#E2E8F0;font-size:.76rem;">{lbl}</div>
-            <div style="font-size:.62rem;color:#64748B;">{sub}</div>
-          </div>
-        </div>""", unsafe_allow_html=True)
-
-    st.divider()
+    st.markdown("<br><br>", unsafe_allow_html=True)
     if st.session_state.vector_store:
-        st.success("📚 Knowledge base active")
+        st.markdown("<div style='padding-left:8px;'><span style='color:#00FF87;font-size:.8rem;'>●</span> <span style='font-size:.8rem;color:#A0A0A0;'>Knowledge connected</span></div>", unsafe_allow_html=True)
     else:
-        st.caption("No document loaded")
+        st.markdown("<div style='padding-left:8px;font-size:.8rem;color:#737373;'>No document loaded</div>", unsafe_allow_html=True)
 
-    st.divider()
+    st.markdown("<br><hr style='border-color:rgba(255,255,255,0.05);'><br>", unsafe_allow_html=True)
     st.markdown("""
-    <div style='font-size:.62rem;color:#3A3A5A;text-align:center;padding-top:4px;'>
-      Engineered &amp; Deployed by<br>
-      <span style='color:rgba(0,229,255,.4);'>Abdullah Ibne Tayeb Tamur</span>
+    <div style='font-size:.62rem;color:#3A3A5A;text-align:left;padding-left:8px;'>
+      Engineered by<br>
+      <span style='color:rgba(255,255,255,.3);'>Abdullah Ibne Tayeb Tamur</span>
     </div>""", unsafe_allow_html=True)
 
 
@@ -350,47 +355,8 @@ st.markdown("""
     <div class="ws-pill"><div class="ws-dot"></div>Systems Online</div>
   </div>
 </div>
+</div>
 """, unsafe_allow_html=True)
-
-# Use absolute positioning to place the Menu precisely over the header's right side
-st.markdown("""
-<style>
-.new-chat-btn-container {
-    position: fixed;
-    top: .9rem;
-    right: 2rem;
-    z-index: 99999;
-}
-.new-chat-btn-container button {
-    background: rgba(8,11,18,.95) !important;
-    border: 1px solid rgba(0, 229, 255, 0.2) !important;
-    padding: 4px 16px !important;
-}
-[data-testid="stPopoverBody"] {
-    background: rgba(8,11,18,.95) !important;
-    border: 1px solid rgba(0, 229, 255, 0.2) !important;
-    backdrop-filter: blur(20px);
-}
-</style>
-""", unsafe_allow_html=True)
-
-st.markdown('<div class="new-chat-btn-container">', unsafe_allow_html=True)
-with st.popover("⚙️ Options"):
-    if st.button("➕ New Chat", use_container_width=True):
-        st.session_state.messages     = []
-        st.session_state.vector_store = None
-        st.session_state.history_loaded = True
-        st.session_state.upload_key  += 1
-        st.rerun()
-    if st.button("🗑️ Clear All Chats", use_container_width=True):
-        st.session_state.messages     = []
-        st.session_state.vector_store = None
-        st.session_state.history_loaded = True
-        st.session_state.upload_key  += 1
-        clear_history()
-        st.rerun()
-st.markdown('</div>', unsafe_allow_html=True)
-
 
 
 # ════════════════════════════════════════════════════════════════════════════
