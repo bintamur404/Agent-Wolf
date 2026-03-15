@@ -12,7 +12,7 @@ import streamlit as st
 from dotenv import load_dotenv
 
 from agents.router import route
-from database.vector_store import init_db, load_history, save_message
+from database.vector_store import init_db, load_history, save_message, clear_history
 
 load_dotenv()
 
@@ -327,17 +327,6 @@ with st.sidebar:
         st.caption("No document loaded")
 
     st.divider()
-
-    # ── New Chat ──────────────────────────────────────────────────────────────
-    if st.button("🗑️ New Chat", use_container_width=True):
-        st.session_state.messages     = []
-        st.session_state.vector_store = None
-        st.session_state.history_loaded = True   # don't reload from SQLite
-        # Increment key → forces Streamlit to destroy and recreate file uploader
-        st.session_state.upload_key  += 1
-        st.rerun()
-
-    st.divider()
     st.markdown("""
     <div style='font-size:.62rem;color:#3A3A5A;text-align:center;padding-top:4px;'>
       Engineered &amp; Deployed by<br>
@@ -359,13 +348,49 @@ st.markdown("""
   </div>
   <div style="display:flex;align-items:center;gap:16px;">
     <div class="ws-pill"><div class="ws-dot"></div>Systems Online</div>
-    <div class="ws-credit">
-      Engineered &amp; Deployed by<br>
-      <span>Abdullah Ibne Tayeb Tamur</span>
-    </div>
   </div>
 </div>
 """, unsafe_allow_html=True)
+
+# Use absolute positioning to place the Menu precisely over the header's right side
+st.markdown("""
+<style>
+.new-chat-btn-container {
+    position: fixed;
+    top: .9rem;
+    right: 2rem;
+    z-index: 99999;
+}
+.new-chat-btn-container button {
+    background: rgba(8,11,18,.95) !important;
+    border: 1px solid rgba(0, 229, 255, 0.2) !important;
+    padding: 4px 16px !important;
+}
+[data-testid="stPopoverBody"] {
+    background: rgba(8,11,18,.95) !important;
+    border: 1px solid rgba(0, 229, 255, 0.2) !important;
+    backdrop-filter: blur(20px);
+}
+</style>
+""", unsafe_allow_html=True)
+
+st.markdown('<div class="new-chat-btn-container">', unsafe_allow_html=True)
+with st.popover("⚙️ Options"):
+    if st.button("➕ New Chat", use_container_width=True):
+        st.session_state.messages     = []
+        st.session_state.vector_store = None
+        st.session_state.history_loaded = True
+        st.session_state.upload_key  += 1
+        st.rerun()
+    if st.button("🗑️ Clear All Chats", use_container_width=True):
+        st.session_state.messages     = []
+        st.session_state.vector_store = None
+        st.session_state.history_loaded = True
+        st.session_state.upload_key  += 1
+        clear_history()
+        st.rerun()
+st.markdown('</div>', unsafe_allow_html=True)
+
 
 
 # ════════════════════════════════════════════════════════════════════════════

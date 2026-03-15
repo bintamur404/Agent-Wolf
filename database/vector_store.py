@@ -100,3 +100,9 @@ def load_history() -> list:
             "SELECT role, content FROM chat_history ORDER BY id"
         ).fetchall()
     return [{"role": r[0], "content": r[1]} for r in rows]
+
+
+def clear_history() -> None:
+    with sqlite3.connect(_DB_PATH) as conn:
+        conn.execute("DELETE FROM chat_history")
+        conn.commit()
