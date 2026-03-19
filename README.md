@@ -115,7 +115,7 @@ To demonstrate the execution of the Wolf Scholar chatbot, workflow tracing has b
 ## 📺 Project Video Demonstration
 For a full walkthrough of the Wolf Scholar platform, including the intelligent routing engine and multi-modal agent capabilities, please watch the video demo below:
 
-[![Wolf Scholar Youtube ](https://youtu.be/c-AV_P3phkU?si=DwhrlimTFWmYGdUL)
+[![Wolf Scholar Youtube](https://img.youtube.com/vi/c-AV_P3phkU/maxresdefault.jpg)](https://youtu.be/c-AV_P3phkU)
 
 * **Key Highlights:**
   * Interactive demonstration of Unified Routing.
