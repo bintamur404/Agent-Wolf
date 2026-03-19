@@ -104,7 +104,7 @@ To demonstrate the execution of the Wolf Scholar chatbot, workflow tracing has b
   * [Link to Trace](https://smith.langchain.com/public/fa90a965-c549-4b7b-be52-3a443a1953b5/r)
   * *Description:* Shows the agent deciding to use the DuckDuckGo search tool to pull live academic data.
 * **Trace 3: Vision/OCR Diagnostics**
-  * [Link to Trace](https://smith.langchain.com/public/14f413d7-eaae-4d18-a4cc-baa5e6ae98ad/r)
+  * [Link to Trace](https://smith.langchain.com/public/8d2747e9-b31a-44a2-9935-ed380d363495/r)
   * *Description:* Displays the workflow of encoding an image and passing it to the Llama 4 Scout model for analysis.
 
 **Visual Trace Execution:**
